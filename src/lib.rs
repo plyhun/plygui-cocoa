@@ -19,7 +19,7 @@ mod button;
 mod layout_linear;
 //mod layout_relative;
 
-pub type NativeId = winapi::HWND;
+pub type NativeId = cocoa::base::id;
 
 pub use self::application::Application;
 pub use self::window::Window;

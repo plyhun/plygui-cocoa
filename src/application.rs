@@ -9,7 +9,8 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 
-use UiApplication;
+use plygui_api::traits::{UiWindow, UiApplication};
+use plygui_api::types::WindowStartSize;
 
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
@@ -42,8 +43,8 @@ impl Application {
 }
 
 impl UiApplication for Application {
-    fn new_window(&mut self, title: &str, width: u16, height: u16, has_menu: bool) -> Box<Window> {
-        Window::new(title, width, height, has_menu)
+    fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
+        Window::new(title, size, has_menu)
     }
     fn name(&self) -> &str {
         self.name.as_ref()

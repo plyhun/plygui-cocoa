@@ -10,19 +10,21 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 
-use {development, ids, Id, UiRole, UiRoleMut, UiWindow, UiControl, UiMember, UiContainer, UiMultiContainer, Visibility};
+use plygui_api::{development, ids, types};
+use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
+use plygui_api::members::MEMBER_ID_WINDOW;
 
-pub const IVAR: &str = development::CLASS_ID_WINDOW;
+pub const IVAR: &str = MEMBER_ID_WINDOW;
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
 }
 
 pub struct Window {
-    id: Id,
+	base: development::UiMemberBase,
+	
     window: id,
     container: id,
-    visibility: Visibility,
-
+    
     child: Option<Box<UiControl>>,
     h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
 }
@@ -30,16 +32,19 @@ pub struct Window {
 impl Window {
     pub(crate) fn new(
                       title: &str,
-                      width: u16,
-                      height: u16,
+                      start_size: types::WindowStartSize,
                       has_menu: bool)
                       -> Box<Window> {
         use self::cocoa::appkit::NSView;
 
         unsafe {
+        	let rect = NSRect::new(NSPoint::new(0.0, 0.0),
+                                                                          match start_size {
+	                	types::WindowStartSize::Exact(width, height) => NSSize::new(width as f64, height as f64),
+	                	types::WindowStartSize::Fullscreen => unimplemented!(),
+                	});
             let window = NSWindow::alloc(nil)
-                .initWithContentRect_styleMask_backing_defer_(NSRect::new(NSPoint::new(0.0, 0.0),
-                                                                          NSSize::new(width as f64, height as f64)),
+                .initWithContentRect_styleMask_backing_defer_(rect,
                                                               NSClosableWindowMask | NSResizableWindowMask | NSMiniaturizableWindowMask | NSTitledWindowMask,
                                                               NSBackingStoreBuffered,
                                                               NO)
@@ -53,17 +58,23 @@ impl Window {
             current_app.activateWithOptions_(cocoa::appkit::NSApplicationActivateIgnoringOtherApps);
 
             let view = NSView::alloc(nil)
-                .initWithFrame_(NSRect::new(NSPoint::new(0.0, 0.0),
-                                            NSSize::new(width as f64, height as f64)))
+                .initWithFrame_(rect)
                 .autorelease();
             window.setContentView_(view);
 
             let mut window = Box::new(Window {
-							            id: ids::next(),
+							            base: development::UiMemberBase::with_params(
+								            types::Visibility::Visible,
+						                    development::UiMemberFunctions {
+						                        fn_member_id: member_id,
+						                        fn_is_control: is_control,
+						                        fn_is_control_mut: is_control_mut,
+						                        fn_size: size,
+						                    }
+							            ),
                                           window: window,
                                           container: view,
-                                          visibility: Visibility::Visible,
-
+                                          
                                           child: None,
                                           h_resize: None,
                                       });
@@ -80,21 +91,19 @@ impl Window {
 
 impl UiWindow for Window {}
 
-impl UiContainer for Window {
-    fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
+impl UiSingleContainer for Window {
+	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
         use self::cocoa::appkit::NSView;
 
         unsafe {
             let mut old = self.child.take();
             if let Some(old) = old.as_mut() {
-                let mut wc = common::cast_uicontrol_to_cocoa_mut(old);
-                wc.on_removed_from_container(self);
+                old.on_removed_from_container(self);
             }
             if let Some(new) = child.as_mut() {
             	let (_, h) = self.size();
-                let mut wc = common::cast_uicontrol_to_cocoa_mut(new);
-                wc.on_added_to_container(self, 0, 0); //TODO padding
-                self.container.addSubview_(wc.as_base().control); 
+                new.on_added_to_container(self, 0, 0); //TODO padding
+                self.container.addSubview_(new.native_id() as id); 
             }
             self.child = child;
 
@@ -112,7 +121,10 @@ impl UiContainer for Window {
             None
         }
     }
-    fn find_control_by_id_mut(&mut self, id_: Id) -> Option<&mut UiControl> {
+}
+
+impl UiContainer for Window {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
         /*if self.id() == id_ {
 			return Some(self);
 		} else*/
@@ -123,7 +135,7 @@ impl UiContainer for Window {
         }
         None
     }
-    fn find_control_by_id(&self, id_: Id) -> Option<&UiControl> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
         /*if self.id() == id_ {
 			return Some(self);
 		} else*/
@@ -134,27 +146,27 @@ impl UiContainer for Window {
         }
         None
     }
-    fn is_multi_mut(&mut self) -> Option<&mut UiMultiContainer> {
-        None
+    fn is_single_mut(&mut self) -> Option<&mut UiSingleContainer> {
+        Some(self)
     }
-    fn is_multi(&self) -> Option<&UiMultiContainer> {
-        None
+    fn is_single(&self) -> Option<&UiSingleContainer> {
+        Some(self)
     }
 }
 
 impl UiMember for Window {
-    fn set_visibility(&mut self, visibility: Visibility) {
-        self.visibility = visibility;
+    fn set_visibility(&mut self, visibility: types::Visibility) {
+        self.base.visibility = visibility;
         unsafe {
-            if Visibility::Visible == visibility {
+            if types::Visibility::Visible == visibility {
                 msg_send![self.window, setIsVisible: YES];
             } else {
                 msg_send![self.window, setIsVisible: NO];
             }
         }
     }
-    fn visibility(&self) -> Visibility {
-        self.visibility
+    fn visibility(&self) -> types::Visibility {
+        self.base.visibility
     }
     fn size(&self) -> (u16, u16) {
         unsafe {
@@ -165,18 +177,15 @@ impl UiMember for Window {
     fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
         self.h_resize = handler;
     }
-
-    fn role<'a>(&'a self) -> UiRole<'a> {
-        UiRole::Window(self)
+	fn member_id(&self) -> &'static str {
+        self.base.member_id()
     }
-    fn role_mut<'a>(&'a mut self) -> UiRoleMut<'a> {
-        UiRoleMut::Window(self)
+    
+    fn id(&self) -> ids::Id {
+        self.base.id
     }
-    fn id(&self) -> Id {
-        self.id
-    }
-    fn native_id(&self) -> NativeId {
-    	self.window
+    unsafe fn native_id(&self) -> usize {
+    	self.window as usize
     }
     
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
@@ -201,6 +210,15 @@ unsafe impl CocoaContainer for Window {
         self.window
     }
 }
+
+unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
+    None
+}
+unsafe fn is_control_mut(_: &mut development::UiMemberBase) -> Option<&mut development::UiControlBase> {
+    None
+}
+impl_size!(Window);
+impl_member_id!(MEMBER_ID_WINDOW);
 
 unsafe fn register_window_class() -> RefClass {
     let superclass = Class::get("NSObject").unwrap();
