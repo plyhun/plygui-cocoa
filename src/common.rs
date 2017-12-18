@@ -114,10 +114,6 @@ impl CocoaControlBase {
     }
 }
 
-pub unsafe trait CocoaContainer: UiContainer + UiMember {
-    unsafe fn cocoa_id(&self) -> cocoa_id;
-}
-
 /*pub unsafe fn cast_uicontrol_to_cocoa_mut(input: &mut Box<UiControl>) -> &mut CocoaControl {
     use std::ops::DerefMut;
     match input.role_mut() {

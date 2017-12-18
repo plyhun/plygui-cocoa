@@ -52,6 +52,15 @@ impl UiButton for Button {
     fn label(&self) -> &str {
         self.label.as_ref()
     }
+    fn set_label(&mut self, label: &str) {
+    	self.label = label.into();
+    	if self.base.control != 0 as id {
+    		unsafe {
+    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
+	    		self.base.control.setTitle_(title);
+    		}
+    	}
+    }
     fn on_left_click(&mut self, cb: Option<Box<FnMut(&mut UiButton)>>) {
         self.h_left_clicked = cb;
     }
@@ -147,6 +156,19 @@ impl UiControl for Button {
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         unsafe { self.base.on_removed_from_container(); }
     }	
+    #[cfg(feature = "markup")]
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, _: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
+    	if markup.member_type != MEMBER_ID_BUTTON && markup.member_type != plygui_api::markup::MEMBER_TYPE_BUTTON {
+			match markup.id {
+				Some(ref id) => panic!("Markup does not belong to Button: {} ({})", markup.member_type, id),
+				None => panic!("Markup does not belong to Button: {}", markup.member_type),
+			}
+		}		
+    	if let Some(ref id) = markup.id {
+    		ids.insert(id.clone(), self.id());
+    	}
+    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute())
+    }
 }
 
 impl UiMember for Button {
@@ -238,6 +260,11 @@ impl development::UiDrawable for Button {
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn spawn() -> Box<UiControl> {
+	Button::new("")
 }
 
 unsafe fn register_window_class() -> common::RefClass {

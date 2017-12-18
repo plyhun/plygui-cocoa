@@ -174,6 +174,24 @@ impl UiControl for LinearLayout {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
         self.base.root_mut()
     }
+    #[cfg(feature = "markup")]
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
+    	if markup.member_type != MEMBER_ID_LAYOUT_LINEAR && markup.member_type != plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT {
+			match markup.id {
+				Some(ref id) => panic!("Markup does not belong to LinearLayout: {} ({})", markup.member_type, id),
+				None => panic!("Markup does not belong to LinearLayout: {}", markup.member_type),
+			}
+		}
+		if let Some(ref id) = markup.id {
+    		ids.insert(id.clone(), self.id());
+    	}
+		
+    	for child_markup in markup.attributes.get(plygui_api::markup::CHILDREN).unwrap_or(&plygui_api::markup::MarkupNode::Children(vec![])).as_children() {
+    		let mut child = registry.get(&child_markup.member_type).unwrap()();
+    		child.fill_from_markup(child_markup, registry, ids);
+			self.push_child(child);
+		}		
+    }
 }
 
 impl UiMultiContainer for LinearLayout {
@@ -374,10 +392,9 @@ impl development::UiDrawable for LinearLayout {
     }
 }
 
-unsafe impl CocoaContainer for LinearLayout {
-    unsafe fn cocoa_id(&self) -> cocoa_id {
-        self.base.control
-    }
+#[allow(dead_code)]
+pub(crate) fn spawn() -> Box<UiControl> {
+	LinearLayout::new(layout::Orientation::Vertical)
 }
 
 unsafe fn register_window_class() -> RefClass {

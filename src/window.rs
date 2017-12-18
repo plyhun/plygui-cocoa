@@ -205,12 +205,6 @@ impl Drop for Window {
     }
 }
 
-unsafe impl CocoaContainer for Window {
-    unsafe fn cocoa_id(&self) -> id {
-        self.window
-    }
-}
-
 unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
     None
 }
