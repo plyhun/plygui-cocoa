@@ -405,7 +405,7 @@ unsafe fn register_window_class() -> RefClass {
 
     RefClass(decl.register())
 }
-
+impl_invalidate!(LinearLayout);
 impl_is_control!(LinearLayout);
 impl_size!(LinearLayout);
 impl_member_id!(MEMBER_ID_LAYOUT_LINEAR);

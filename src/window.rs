@@ -82,6 +82,8 @@ impl Window {
             let delegate: *mut Object = msg_send!(WINDOW_CLASS.0, new);
             (&mut *delegate).set_ivar(IVAR,
                                       window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
+            /*(&mut *window.window).set_ivar(IVAR,
+                                      window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);*/
             window.window.setDelegate_(delegate);
 
             window
