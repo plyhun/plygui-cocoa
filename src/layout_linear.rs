@@ -1,8 +1,8 @@
 use super::*;
 use super::common::*;
 
-use plygui_api::{layout, ids, types, development};
-use plygui_api::traits::{UiControl, UiLayedOut, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::{layout, ids, types, development, callbacks};
+use plygui_api::traits::{UiControl, UiLayable, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use self::cocoa::appkit::NSView;
@@ -58,23 +58,22 @@ impl UiMember for LinearLayout {
     fn size(&self) -> (u16, u16) {
         self.base.measured_size
     }
-	fn member_id(&self) -> &'static str {
-    	self.base.control_base.member_base.member_id()
-    }
-    
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+	fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.base.h_resize = handler;
     }
 
     unsafe fn native_id(&self) -> usize {
         self.base.control as usize
     }
-    fn id(&self) -> ids::Id {
-    	self.base.control_base.member_base.id
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.control_base.member_base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.control_base.member_base.as_mut()
     }
 }
 
-impl UiLayedOut for LinearLayout {
+impl UiLayable for LinearLayout {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -110,7 +109,13 @@ impl UiLayedOut for LinearLayout {
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
-	}   
+	} 
+	fn as_member(&self) -> &UiMember {
+		self
+	}
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}  
 }
 
 impl UiControl for LinearLayout {
@@ -162,36 +167,32 @@ impl UiControl for LinearLayout {
     fn is_container(&self) -> Option<&UiContainer> {
         Some(self)
     }
-    fn parent(&self) -> Option<&types::UiMemberCommon> {
+    fn parent(&self) -> Option<&types::UiMemberBase> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&types::UiMemberCommon> {
+    fn root(&self) -> Option<&types::UiMemberBase> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
+    
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
-    	if markup.member_type != MEMBER_ID_LAYOUT_LINEAR && markup.member_type != plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT {
-			match markup.id {
-				Some(ref id) => panic!("Markup does not belong to LinearLayout: {} ({})", markup.member_type, id),
-				None => panic!("Markup does not belong to LinearLayout: {}", markup.member_type),
-			}
-		}
-		if let Some(ref id) = markup.id {
-    		ids.insert(id.clone(), self.id());
-    	}
-		
-    	for child_markup in markup.attributes.get(plygui_api::markup::CHILDREN).unwrap_or(&plygui_api::markup::MarkupNode::Children(vec![])).as_children() {
-    		let mut child = registry.get(&child_markup.member_type).unwrap()();
-    		child.fill_from_markup(child_markup, registry, ids);
-			self.push_child(child);
-		}		
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    	use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
+    	
+    	fill_from_markup_base!(self, markup, registry, LinearLayout, [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]);
+		fill_from_markup_children!(self, markup, registry);		
     }
+    fn as_layable(&self) -> &UiLayable {
+    	self
+    }
+	fn as_layable_mut(&mut self) -> &mut UiLayable {
+		self
+	}
 }
 
 impl UiMultiContainer for LinearLayout {
@@ -256,6 +257,12 @@ impl UiMultiContainer for LinearLayout {
     fn child_at_mut(&mut self, index: usize) -> Option<&mut Box<UiControl>> {
         self.children.get_mut(index)
     }
+    fn as_container(&self) -> &UiContainer {
+    	self
+    }
+	fn as_container_mut(&mut self) -> &mut UiContainer {
+		self
+	}
 }
 
 impl UiContainer for LinearLayout {
@@ -266,11 +273,11 @@ impl UiContainer for LinearLayout {
         Some(self)
     }
     fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut UiControl> {
-        if self.id() == id_ {
+        if self.as_base().id() == id_ {
             return Some(self);
         }
         for child in self.children.as_mut_slice() {
-            if child.id() == id_ {
+            if child.as_base().id() == id_ {
                 return Some(child.as_mut());
             } else if let Some(c) = child.is_container_mut() {
                 let ret = c.find_control_by_id_mut(id_);
@@ -283,11 +290,11 @@ impl UiContainer for LinearLayout {
         None
     }
     fn find_control_by_id(&self, id_: ids::Id) -> Option<&UiControl> {
-        if self.id() == id_ {
+        if self.as_base().id() == id_ {
             return Some(self);
         }
         for child in self.children.as_slice() {
-            if child.id() == id_ {
+            if child.as_base().id() == id_ {
                 return Some(child.as_ref());
             } else if let Some(c) = child.is_container() {
                 let ret = c.find_control_by_id(id_);
@@ -299,6 +306,12 @@ impl UiContainer for LinearLayout {
         }
         None
     }
+    fn as_member(&self) -> &UiMember {
+    	self
+    }
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiLinearLayout for LinearLayout {
@@ -308,6 +321,18 @@ impl UiLinearLayout for LinearLayout {
     fn set_orientation(&mut self, orientation: layout::Orientation) {
         self.orientation = orientation;
     }
+    fn as_control(&self) -> &UiControl {
+    	self
+    }
+	fn as_control_mut(&mut self) -> &mut UiControl {
+		self
+	}
+	fn as_multi_container(&self) -> &UiMultiContainer {
+		self
+	}
+	fn as_multi_container_mut(&mut self) -> &mut UiMultiContainer {
+		self
+	}
 }
 
 impl development::UiDrawable for LinearLayout {
@@ -345,7 +370,7 @@ impl development::UiDrawable for LinearLayout {
 	                let object: &Object = mem::transmute(self.base.control);
 	                let saved: *mut c_void = *object.get_ivar(IVAR);
 	                let mut ll2: &mut LinearLayout = mem::transmute(saved);
-	                (cb)(ll2, self.base.measured_size.0, self.base.measured_size.1);
+	                (cb.as_mut())(ll2, self.base.measured_size.0, self.base.measured_size.1);
 	            }
 	        }
 	    }

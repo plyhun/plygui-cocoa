@@ -2,15 +2,15 @@ use super::*;
 use super::common::*;
 
 use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicyRegular};
-use self::cocoa::base::{class, id};
-use objc::runtime::{Class, Object};
+use self::cocoa::base::{id};
+use objc::runtime::{Class};
 use objc::declare::ClassDecl;
 
-use std::mem;
 use std::os::raw::c_void;
 
-use plygui_api::traits::{UiWindow, UiApplication};
+use plygui_api::traits::{UiWindow, UiApplication, UiMember};
 use plygui_api::types::WindowStartSize;
+use plygui_api::ids::Id;
 
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
@@ -19,6 +19,7 @@ lazy_static! {
 pub struct Application {
     app: id,
     name: String,
+    windows: Vec<id>,
 }
 
 impl Application {
@@ -27,6 +28,7 @@ impl Application {
             let mut app = Box::new(Application {
                                        app: msg_send![WINDOW_CLASS.0, sharedApplication],
                                        name: name.into(),
+                                       windows: Vec::with_capacity(1),
                                    });
             (&mut *app.app).set_ivar("plyguiApplication",
                                      app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
@@ -44,13 +46,43 @@ impl Application {
 
 impl UiApplication for Application {
     fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
-        Window::new(title, size, has_menu)
+        let w = Window::new(title, size, has_menu);
+        self.windows.push(w.window);
+        w
     }
     fn name(&self) -> &str {
         self.name.as_ref()
     }
     fn start(&mut self) {
         unsafe { self.app.run() };
+    }
+    fn find_member_by_id_mut(&mut self, id: Id) -> Option<&mut UiMember> {
+    	use plygui_api::traits::UiContainer;
+    	
+    	for window in self.windows.as_mut_slice() {
+    		if let Some(window) = unsafe { common::cast_cocoa_id_mut::<Window>(*window) } {
+    			if window.as_base().id() == id {
+	    			return Some(window);
+	    		} else {
+	    			return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+	    		}
+    		}
+    	}
+    	None
+    }
+    fn find_member_by_id(&self, id: Id) -> Option<&UiMember> {
+    	use plygui_api::traits::UiContainer;
+    	
+    	for window in self.windows.as_slice() {
+    		if let Some(window) = unsafe { common::cast_cocoa_id_mut::<Window>(*window) } {
+    			if window.as_base().id() == id {
+	    			return Some(window);
+	    		} else {
+	    			return window.find_control_by_id(id).map(|control| control.as_member());
+	    		}
+    		}
+    	}
+    	None
     }
 }
 

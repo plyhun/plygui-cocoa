@@ -1,7 +1,7 @@
 use super::*;
 
-use plygui_api::{layout, ids, types, development};
-use plygui_api::traits::{UiControl, UiLayedOut, UiButton, UiMember, UiContainer};
+use plygui_api::{layout, types, development, callbacks};
+use plygui_api::traits::{UiControl, UiLayable, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
 use self::cocoa::appkit::{NSBezelStyle, NSButton};
@@ -26,8 +26,8 @@ pub struct Button {
     base: common::CocoaControlBase,
 
     label: String,
-    h_left_clicked: Option<Box<FnMut(&mut UiButton)>>,
-    h_right_clicked: Option<Box<FnMut(&mut UiButton)>>,
+    h_left_clicked: Option<callbacks::Click>,
+    h_right_clicked: Option<callbacks::Click>,
 }
 
 impl Button {
@@ -61,15 +61,22 @@ impl UiButton for Button {
     		}
     	}
     }
-    fn on_left_click(&mut self, cb: Option<Box<FnMut(&mut UiButton)>>) {
+    fn on_left_click(&mut self, cb: Option<callbacks::Click>) {
         self.h_left_clicked = cb;
     }
     /*fn on_right_click(&mut self, cb: Option<Box<FnMut(&mut UiButton)>>) {
         self.h_right_clicked = cb;
     }*/
+    
+    fn as_control(&self) -> &UiControl {
+    	self
+    }
+	fn as_control_mut(&mut self) -> &mut UiControl {
+		self
+	}
 }
 
-impl UiLayedOut for Button {
+impl UiLayable for Button {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -106,6 +113,12 @@ impl UiLayedOut for Button {
 		self.base.control_base.layout.alignment = alignment;
 		self.base.invalidate();
 	}   
+	fn as_member(&self) -> &UiMember {
+		self
+	}
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiControl for Button {
@@ -116,16 +129,16 @@ impl UiControl for Button {
         None
     }
     
-    fn parent(&self) -> Option<&types::UiMemberCommon> {
+    fn parent(&self) -> Option<&types::UiMemberBase> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&types::UiMemberCommon> {
+    fn root(&self) -> Option<&types::UiMemberBase> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
@@ -156,19 +169,26 @@ impl UiControl for Button {
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         unsafe { self.base.on_removed_from_container(); }
     }	
+    
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, _: &plygui_api::markup::MarkupRegistry, ids: &mut plygui_api::markup::MarkupIds) {
-    	if markup.member_type != MEMBER_ID_BUTTON && markup.member_type != plygui_api::markup::MEMBER_TYPE_BUTTON {
-			match markup.id {
-				Some(ref id) => panic!("Markup does not belong to Button: {} ({})", markup.member_type, id),
-				None => panic!("Markup does not belong to Button: {}", markup.member_type),
-			}
-		}		
-    	if let Some(ref id) = markup.id {
-    		ids.insert(id.clone(), self.id());
+    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    	use plygui_api::markup::MEMBER_TYPE_BUTTON;
+    	
+    	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
+    	fill_from_markup_label!(self, markup);
+    	//fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
+    	
+    	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
+    		let callback: callbacks::Click = registry.pop_callback(on_left_click.as_attribute()).unwrap();
+    		self.on_left_click(Some(callback));
     	}
-    	self.set_label(&markup.attributes.get("label").unwrap().as_attribute())
     }
+    fn as_layable(&self) -> &UiLayable {
+    	self
+    }
+	fn as_layable_mut(&mut self) -> &mut UiLayable {
+		self
+	}
 }
 
 impl UiMember for Button {
@@ -181,18 +201,12 @@ impl UiMember for Button {
     fn size(&self) -> (u16, u16) {
         self.base.measured_size
     }
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.base.h_resize = handler;
     }
-	fn member_id(&self) -> &'static str {
-    	self.base.control_base.member_base.member_id()
-    }
-    
+	
     unsafe fn native_id(&self) -> usize {
         self.base.control as usize
-    }
-    fn id(&self) -> ids::Id {
-    	self.base.id()
     }
     fn is_control(&self) -> Option<&UiControl> {
     	Some(self)
@@ -200,6 +214,12 @@ impl UiMember for Button {
     fn is_control_mut(&mut self) -> Option<&mut UiControl> {
     	Some(self)
     } 
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.control_base.member_base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.control_base.member_base.as_mut()
+    }
 }
 
 impl development::UiDrawable for Button {
@@ -219,7 +239,7 @@ impl development::UiDrawable for Button {
                 let object: &Object = mem::transmute(self.base.control);
                 let saved: *mut c_void = *object.get_ivar(IVAR);
                 let mut button2: &mut Button = mem::transmute(saved);
-                (cb)(button2,
+                (cb.as_mut())(button2,
                      self.base.measured_size.0,
                      self.base.measured_size.1);
             }
@@ -287,7 +307,7 @@ extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {
         msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
         if let Some(ref mut cb) = button.h_left_clicked {
             let b2: &mut Button = mem::transmute(saved);
-            (cb)(b2);
+            (cb.as_mut())(b2);
         }
     }
 }
@@ -298,7 +318,7 @@ extern "C" fn button_right_click(this: &Object, _: Sel, param: id) {
         let button: &mut Button = mem::transmute(saved.clone());
         if let Some(ref mut cb) = button.h_right_clicked {
             let b2: &mut Button = mem::transmute(saved);
-            (cb)(b2);
+            (cb.as_mut())(b2);
         }
         msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
     }

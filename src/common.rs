@@ -7,7 +7,7 @@ use self::cocoa::foundation::{NSString, NSRect, NSRange};
 use self::cocoa::appkit::{NSWindow, NSView};
 use objc::runtime::{Class, Object, Ivar, YES, NO, class_copyIvarList};
 
-use plygui_api::{development, ids, layout, types};
+use plygui_api::{development, ids, layout, types, callbacks};
 use plygui_api::traits::UiMember;
 
 pub struct RefClass(pub *const Class);
@@ -24,12 +24,12 @@ pub const IVAR: &str = "plyguiIvar";
 
 #[repr(C)]
 pub struct CocoaControlBase {
-    pub control_base: development::UiControlBase, 
+    pub control_base: development::UiControlCommon, 
     
     pub control: cocoa_id,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
-    pub h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
+    pub h_resize: Option<callbacks::Resize>,
     
     //invalidate: unsafe fn(this: &mut WindowsControlBase),
 }
@@ -38,8 +38,8 @@ impl CocoaControlBase {
 	pub fn invalidate(&mut self) {}
 	pub fn with_params(functions: development::UiMemberFunctions) -> CocoaControlBase {
 		CocoaControlBase {
-        	control_base: development::UiControlBase {
-	        	member_base: development::UiMemberBase::with_params(types::Visibility::Visible, functions),
+        	control_base: development::UiControlCommon {
+	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
 		        layout: development::layout::LayoutBase {
 		            width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
@@ -91,7 +91,7 @@ impl CocoaControlBase {
 	        }
     	}
     }
-    pub fn parent(&self) -> Option<&types::UiMemberCommon> {
+    pub fn parent(&self) -> Option<&types::UiMemberBase> {
         unsafe {
             let id_: cocoa_id = msg_send![self.control, superview];
             if id_.is_null() {
@@ -100,7 +100,7 @@ impl CocoaControlBase {
             cast_cocoa_id(id_)
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
             let id_: cocoa_id = msg_send![self.control, superview];
             if id_.is_null() {
@@ -109,7 +109,7 @@ impl CocoaControlBase {
             cast_cocoa_id_mut(id_)
         }
     }
-    pub fn root(&self) -> Option<&types::UiMemberCommon> {
+    pub fn root(&self) -> Option<&types::UiMemberBase> {
         unsafe {
             let w: cocoa_id = msg_send![self.control, window];
             if w.is_null() {
@@ -118,7 +118,7 @@ impl CocoaControlBase {
             cast_cocoa_id(w.delegate())
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberCommon> {
+    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
             let w: cocoa_id = msg_send![self.control, window];
             cast_cocoa_id_mut(w.delegate())
@@ -180,7 +180,7 @@ pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where 
     let saved: *mut c_void = *id_.get_ivar(ivar.name());
     Some(mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void))
 }
-pub unsafe fn cast_cocoa_id<'a>(id: cocoa_id) -> Option<&'a types::UiMemberCommon> {
+pub unsafe fn cast_cocoa_id<'a>(id: cocoa_id) -> Option<&'a types::UiMemberBase> {
 	if id.is_null() {
         return None;
     }
@@ -265,7 +265,7 @@ macro_rules! impl_invalidate {
 			
 			let parent_hwnd = this.parent_cocoa_id();	
 			if let Some(parent_hwnd) = parent_hwnd {
-				let mparent = common::cast_cocoa_id_mut::<plygui_api::development::UiMemberBase>(parent_hwnd).unwrap();
+				let mparent = common::cast_cocoa_id_mut::<plygui_api::development::UiMemberCommon>(parent_hwnd).unwrap();
 				let (pw, ph) = mparent.size();
 				let this: &mut $typ = mem::transmute(this);
 				//let (_,_,changed) = 
@@ -288,10 +288,10 @@ macro_rules! impl_invalidate {
 #[macro_export]
 macro_rules! impl_is_control {
 	($typ: ty) => {
-		unsafe fn is_control(this: &::plygui_api::development::UiMemberBase) -> Option<&::plygui_api::development::UiControlBase> {
+		unsafe fn is_control(this: &::plygui_api::development::UiMemberCommon) -> Option<&::plygui_api::development::UiControlCommon> {
 			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
 		}
-		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberBase) -> Option<&mut ::plygui_api::development::UiControlBase> {
+		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberCommon) -> Option<&mut ::plygui_api::development::UiControlCommon> {
 			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
 		}
 	}
@@ -299,7 +299,7 @@ macro_rules! impl_is_control {
 #[macro_export]
 macro_rules! impl_size {
 	($typ: ty) => {
-		unsafe fn size(this: &::plygui_api::development::UiMemberBase) -> (u16, u16) {
+		unsafe fn size(this: &::plygui_api::development::UiMemberCommon) -> (u16, u16) {
 			::plygui_api::utils::base_to_impl::<$typ>(this).size()
 		}
 	}
@@ -307,7 +307,7 @@ macro_rules! impl_size {
 #[macro_export]
 macro_rules! impl_member_id {
 	($mem: expr) => {
-		unsafe fn member_id(_: &::plygui_api::development::UiMemberBase) -> &'static str {
+		unsafe fn member_id(_: &::plygui_api::development::UiMemberCommon) -> &'static str {
 			$mem
 		}
 	}

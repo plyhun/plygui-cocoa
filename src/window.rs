@@ -10,7 +10,7 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 
-use plygui_api::{development, ids, types};
+use plygui_api::{development, ids, types, callbacks};
 use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
@@ -19,14 +19,15 @@ lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
 }
 
+#[repr(C)]
 pub struct Window {
-	base: development::UiMemberBase,
+	base: development::UiMemberCommon,
 	
-    window: id,
-    container: id,
+    pub(crate) window: id,
+    pub(crate) container: id,
     
     child: Option<Box<UiControl>>,
-    h_resize: Option<Box<FnMut(&mut UiMember, u16, u16)>>,
+    h_resize: Option<callbacks::Resize>,
 }
 
 impl Window {
@@ -63,7 +64,7 @@ impl Window {
             window.setContentView_(view);
 
             let mut window = Box::new(Window {
-							            base: development::UiMemberBase::with_params(
+							            base: development::UiMemberCommon::with_params(
 								            types::Visibility::Visible,
 						                    development::UiMemberFunctions {
 						                        fn_member_id: member_id,
@@ -91,7 +92,14 @@ impl Window {
     }
 }
 
-impl UiWindow for Window {}
+impl UiWindow for Window {
+	fn as_single_container(&self) -> &UiSingleContainer {
+		self
+	}
+	fn as_single_container_mut(&mut self) -> &mut UiSingleContainer {
+		self
+	}
+}
 
 impl UiSingleContainer for Window {
 	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
@@ -123,6 +131,12 @@ impl UiSingleContainer for Window {
             None
         }
     }
+    fn as_container(&self) -> &UiContainer {
+    	self
+    }
+	fn as_container_mut(&mut self) -> &mut UiContainer {
+		self
+	}
 }
 
 impl UiContainer for Window {
@@ -154,6 +168,12 @@ impl UiContainer for Window {
     fn is_single(&self) -> Option<&UiSingleContainer> {
         Some(self)
     }
+    fn as_member(&self) -> &UiMember {
+    	self
+    }
+	fn as_member_mut(&mut self) -> &mut UiMember {
+		self
+	}
 }
 
 impl UiMember for Window {
@@ -176,17 +196,10 @@ impl UiMember for Window {
             (size.width as u16, size.height as u16)
         }
     }
-    fn on_resize(&mut self, handler: Option<Box<FnMut(&mut UiMember, u16, u16)>>) {
+    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
         self.h_resize = handler;
     }
-	fn member_id(&self) -> &'static str {
-        self.base.member_id()
-    }
-    
-    fn id(&self) -> ids::Id {
-        self.base.id
-    }
-    unsafe fn native_id(&self) -> usize {
+	unsafe fn native_id(&self) -> usize {
     	self.window as usize
     }
     
@@ -195,6 +208,12 @@ impl UiMember for Window {
     }
     fn is_control(&self) -> Option<&UiControl> {
     	None
+    }
+    fn as_base(&self) -> &types::UiMemberBase {
+    	self.base.as_ref()
+    }
+    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
+    	self.base.as_mut()
     }
 }
 
@@ -207,10 +226,10 @@ impl Drop for Window {
     }
 }
 
-unsafe fn is_control(_: &development::UiMemberBase) -> Option<&development::UiControlBase> {
+unsafe fn is_control(_: &development::UiMemberCommon) -> Option<&development::UiControlCommon> {
     None
 }
-unsafe fn is_control_mut(_: &mut development::UiMemberBase) -> Option<&mut development::UiControlBase> {
+unsafe fn is_control_mut(_: &mut development::UiMemberCommon) -> Option<&mut development::UiControlCommon> {
     None
 }
 impl_size!(Window);
@@ -255,7 +274,7 @@ extern "C" fn window_did_resize(this: &Object, _: Sel, _: id) {
         }
         if let Some(ref mut cb) = window.h_resize {
             let w2: &mut Window = mem::transmute(saved);
-            (cb)(w2, size.width as u16, size.height as u16);
+            (cb.as_mut())(w2, size.width as u16, size.height as u16);
         }
     }
 }
@@ -267,7 +286,7 @@ extern "C" fn window_did_change_screen(this: &Object, _: Sel, _: id) {
         if let Some(ref mut cb) = window.h_resize {
             let size = window.window.contentView().frame().size;
             let w2: &mut Window = mem::transmute(saved);
-            (cb)(w2, size.width as u16, size.height as u16);
+            (cb.as_mut())(w2, size.width as u16, size.height as u16);
         }
     }
 }
