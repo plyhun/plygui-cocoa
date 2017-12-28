@@ -2,25 +2,19 @@ use super::*;
 
 use std::{ptr, mem, str};
 use std::os::raw::c_void;
+use std::slice;
+
 use self::cocoa::base::{class, id as cocoa_id};
 use self::cocoa::foundation::{NSString, NSRect, NSRange};
-use self::cocoa::appkit::{NSWindow, NSView};
+use self::cocoa::appkit::NSView;
 use objc::runtime::{Class, Object, Ivar, YES, NO, class_copyIvarList};
 
 use plygui_api::{development, ids, layout, types, callbacks};
-use plygui_api::traits::UiMember;
 
 pub struct RefClass(pub *const Class);
 unsafe impl Sync for RefClass {}
 
 pub const IVAR: &str = "plyguiIvar";
-
-/*pub unsafe trait CocoaControl: UiMember {
-    unsafe fn on_added_to_container(&mut self, &CocoaContainer, x: u16, y: u16);
-    unsafe fn on_removed_from_container(&mut self, &CocoaContainer);
-    fn as_base(&self) -> &CocoaControlBase;
-    fn as_base_mut(&mut self) -> &mut CocoaControlBase;
-}*/
 
 #[repr(C)]
 pub struct CocoaControlBase {
@@ -31,12 +25,11 @@ pub struct CocoaControlBase {
     pub measured_size: (u16, u16),
     pub h_resize: Option<callbacks::Resize>,
     
-    //invalidate: unsafe fn(this: &mut WindowsControlBase),
+    invalidate: unsafe fn(this: &mut CocoaControlBase),
 }
 
 impl CocoaControlBase {
-	pub fn invalidate(&mut self) {}
-	pub fn with_params(functions: development::UiMemberFunctions) -> CocoaControlBase {
+	pub fn with_params(invalidate: unsafe fn(this: &mut CocoaControlBase), functions: development::UiMemberFunctions) -> CocoaControlBase {
 		CocoaControlBase {
         	control_base: development::UiControlCommon {
 	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
@@ -52,7 +45,15 @@ impl CocoaControlBase {
             h_resize: None,
             coords: None,
             measured_size: (0, 0),
+            
+            invalidate: invalidate
         }
+	}
+	pub fn frame(&self) -> NSRect {
+		unsafe { msg_send![self.control, frame] }
+	}
+	pub fn invalidate(&mut self) {
+		unsafe { (self.invalidate)(self) }
 	}
     pub unsafe fn on_removed_from_container(&mut self) {
         self.control.removeFromSuperview();
@@ -83,45 +84,27 @@ impl CocoaControlBase {
     }
     pub fn parent_cocoa_id(&self) -> Option<cocoa_id> {
     	unsafe {
-    		let id_: cocoa_id = msg_send![self.control, superview];
-	        if id_.is_null() {
-	            None
-	        } else {
-	        	Some(id_)
-	        }
+    		parent_cocoa_id(self.control, false)
     	}
     }
     pub fn parent(&self) -> Option<&types::UiMemberBase> {
         unsafe {
-            let id_: cocoa_id = msg_send![self.control, superview];
-            if id_.is_null() {
-                return None;
-            }
-            cast_cocoa_id(id_)
+            parent_cocoa_id(self.control, false).map(|id| cast_cocoa_id(id).unwrap())
         }
     }
     pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
-            let id_: cocoa_id = msg_send![self.control, superview];
-            if id_.is_null() {
-                return None;
-            }
-            cast_cocoa_id_mut(id_)
+            parent_cocoa_id(self.control, false).map(|id| cast_cocoa_id_mut(id).unwrap())
         }
     }
     pub fn root(&self) -> Option<&types::UiMemberBase> {
         unsafe {
-            let w: cocoa_id = msg_send![self.control, window];
-            if w.is_null() {
-                return None;
-            }
-            cast_cocoa_id(w.delegate())
+            parent_cocoa_id(self.control, true).map(|id| cast_cocoa_id(id).unwrap())
         }
     }
     pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
-            let w: cocoa_id = msg_send![self.control, window];
-            cast_cocoa_id_mut(w.delegate())
+            parent_cocoa_id(self.control, true).map(|id| cast_cocoa_id_mut(id).unwrap())
         }
     }
 }
@@ -168,28 +151,32 @@ pub unsafe fn cast_cocoa_id_to_cocoa<'a>(id: cocoa_id) -> Option<&'a mut CocoaCo
         _ => None,
     }
 }*/
-
-pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: Sized {
-	if id.is_null() {
-        return None;
+pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
+	let id_: cocoa_id = if is_root { msg_send![id, window] } else { msg_send![id, superview] };
+    if id_.is_null() || id_ == id {
+        None
+    } else {
+    	Some(id_)
     }
-    let mut ivar_count = 0;
-    let ivars = class_copyIvarList(msg_send![id, class], &mut ivar_count);
-    let ivar: &Ivar = mem::transmute(*ivars);
-    let id_: &Object = mem::transmute(id);
-    let saved: *mut c_void = *id_.get_ivar(ivar.name());
-    Some(mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void))
 }
-pub unsafe fn cast_cocoa_id<'a>(id: cocoa_id) -> Option<&'a types::UiMemberBase> {
+pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: Sized {
+	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *mut ::std::os::raw::c_void))
+}
+pub unsafe fn cast_cocoa_id<'a, T>(id: cocoa_id) -> Option<&'a T> where T: Sized {
+	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *const ::std::os::raw::c_void))
+}
+pub unsafe fn cast_cocoa_id_to_ptr<'a>(id: cocoa_id) -> Option<*mut c_void> {
 	if id.is_null() {
         return None;
-    }
+    }    
     let mut ivar_count = 0;
-    let ivars = class_copyIvarList(msg_send![id, class], &mut ivar_count);
-    let ivar: &Ivar = mem::transmute(*ivars);
-    let id_: &Object = mem::transmute(id);
-    let saved: *mut c_void = *id_.get_ivar(ivar.name());
-    Some(mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void))
+    let class = msg_send![id, class];
+    let ivars = class_copyIvarList(class, &mut ivar_count);
+    let ivars: &[&Ivar] = slice::from_raw_parts_mut(ivars as *mut _, ivar_count as usize);
+    let id_: &Object = mem::transmute(
+    	if ivars.iter().any(|ivar| ivar.name() == IVAR) { id } else { parent_cocoa_id(id, true).unwrap() }
+    );
+    Some(*id_.get_ivar(IVAR))
 }
 
 /*pub unsafe fn cast_cocoa_id_to_uicontainer<'a>(id: cocoa_id) -> Option<&'a mut UiContainer> {
@@ -262,6 +249,7 @@ macro_rules! impl_invalidate {
 	($typ: ty) => {
 		unsafe fn invalidate_impl(this: &mut common::CocoaControlBase) {
 			use plygui_api::development::UiDrawable;
+			use objc::runtime::YES;
 			
 			let parent_hwnd = this.parent_cocoa_id();	
 			if let Some(parent_hwnd) = parent_hwnd {
@@ -273,14 +261,12 @@ macro_rules! impl_invalidate {
 				this.draw(None);		
 						
 				if mparent.is_control().is_some() {
-					let wparent = common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd);
+					let wparent = common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap();
 					//if changed {
-						//wparent.invalidate();
+						wparent.invalidate();
 					//} 
 				}
-				/*if parent_hwnd != 0 as winapi::HWND {
-		    		user32::InvalidateRect(parent_hwnd, ptr::null_mut(), winapi::TRUE);
-		    	}*/
+				msg_send![parent_hwnd, setNeedsDisplay:YES];
 		    }
 		}
 	}

@@ -14,9 +14,11 @@ use plygui_api::{development, ids, types, callbacks};
 use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
-pub const IVAR: &str = MEMBER_ID_WINDOW;
+const BASE_CLASS: &str = "NSWindow";
+
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
+	static ref DELEGATE: RefClass = unsafe { register_delegate() };
 }
 
 #[repr(C)]
@@ -44,7 +46,8 @@ impl Window {
 	                	types::WindowStartSize::Exact(width, height) => NSSize::new(width as f64, height as f64),
 	                	types::WindowStartSize::Fullscreen => unimplemented!(),
                 	});
-            let window = NSWindow::alloc(nil)
+        	let window: id = msg_send![WINDOW_CLASS.0, alloc];
+            let window = window
                 .initWithContentRect_styleMask_backing_defer_(rect,
                                                               NSClosableWindowMask | NSResizableWindowMask | NSMiniaturizableWindowMask | NSTitledWindowMask,
                                                               NSBackingStoreBuffered,
@@ -80,11 +83,11 @@ impl Window {
                                           h_resize: None,
                                       });
 
-            let delegate: *mut Object = msg_send!(WINDOW_CLASS.0, new);
+            let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(IVAR,
                                       window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            /*(&mut *window.window).set_ivar(IVAR,
-                                      window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);*/
+            (&mut *window.window).set_ivar(IVAR,
+                                      window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
             window.window.setDelegate_(delegate);
 
             window
@@ -111,7 +114,7 @@ impl UiSingleContainer for Window {
                 old.on_removed_from_container(self);
             }
             if let Some(new) = child.as_mut() {
-            	let (_, h) = self.size();
+            	let (_, _) = self.size();
                 new.on_added_to_container(self, 0, 0); //TODO padding
                 self.container.addSubview_(new.native_id() as id); 
             }
@@ -235,7 +238,16 @@ unsafe fn is_control_mut(_: &mut development::UiMemberCommon) -> Option<&mut dev
 impl_size!(Window);
 impl_member_id!(MEMBER_ID_WINDOW);
 
-unsafe fn register_window_class() -> RefClass {
+unsafe fn register_window_class() -> common::RefClass {
+    let superclass = Class::get(BASE_CLASS).unwrap();
+    let mut decl = ClassDecl::new(MEMBER_ID_WINDOW, superclass).unwrap();
+
+    decl.add_ivar::<*mut c_void>(IVAR);
+
+    common::RefClass(decl.register())
+}
+
+unsafe fn register_delegate() -> RefClass {
     let superclass = Class::get("NSObject").unwrap();
     let mut decl = ClassDecl::new("PlyguiWindowDelegate", superclass).unwrap();
 

@@ -13,7 +13,6 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 
-pub const IVAR: &str = MEMBER_ID_BUTTON;
 lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
 }
@@ -34,6 +33,7 @@ impl Button {
     pub fn new(label: &str) -> Box<Button> {
         Box::new(Button {
                      base: common::CocoaControlBase::with_params(
+		                     	invalidate_impl,
                              	development::UiMemberFunctions {
 		                             fn_member_id: member_id,
 								     fn_is_control: is_control,
@@ -162,7 +162,7 @@ impl UiControl for Button {
 	            .control
 	            .setBezelStyle_(NSBezelStyle::NSSmallSquareBezelStyle);
 	
-	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
+	        (&mut *self.base.control).set_ivar(common::IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
 	        msg_send![title, release];
         }
     }
@@ -227,23 +227,24 @@ impl development::UiDrawable for Button {
     	if coords.is_some() {
     		self.base.coords = coords;
     	}
-    	unsafe {
-            let mut frame: NSRect = msg_send![self.base.control, frame];
-            frame.size = NSSize::new(self.base.measured_size.0 as f64,
-                                     self.base.measured_size.1 as f64);
-            let (x, y) = self.base.coords.unwrap();
-            frame.origin = NSPoint::new(x as f64, y as f64);
-            msg_send![self.base.control, setFrame: frame];
-
-            if let Some(ref mut cb) = self.base.h_resize {
-                let object: &Object = mem::transmute(self.base.control);
-                let saved: *mut c_void = *object.get_ivar(IVAR);
-                let mut button2: &mut Button = mem::transmute(saved);
-                (cb.as_mut())(button2,
-                     self.base.measured_size.0,
-                     self.base.measured_size.1);
-            }
-        }
+    	if let Some((x, y)) = self.base.coords {
+    		unsafe {
+	            let mut frame: NSRect = self.base.frame();
+	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
+	                                     self.base.measured_size.1 as f64);
+	            frame.origin = NSPoint::new(x as f64, y as f64);
+	            msg_send![self.base.control, setFrame: frame];
+	
+	            if let Some(ref mut cb) = self.base.h_resize {
+	                let object: &Object = mem::transmute(self.base.control);
+	                let saved: *mut c_void = *object.get_ivar(common::IVAR);
+	                let mut button2: &mut Button = mem::transmute(saved);
+	                (cb.as_mut())(button2,
+	                     self.base.measured_size.0,
+	                     self.base.measured_size.1);
+	            }
+	        }
+    	}
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	let old_size = self.base.measured_size;
@@ -289,20 +290,20 @@ pub(crate) fn spawn() -> Box<UiControl> {
 
 unsafe fn register_window_class() -> common::RefClass {
     let superclass = Class::get(BASE_CLASS).unwrap();
-    let mut decl = ClassDecl::new(IVAR, superclass).unwrap();
+    let mut decl = ClassDecl::new(MEMBER_ID_BUTTON, superclass).unwrap();
 
     decl.add_method(sel!(mouseDown:),
                     button_left_click as extern "C" fn(&Object, Sel, id));
     decl.add_method(sel!(rightMouseDown:),
                     button_right_click as extern "C" fn(&Object, Sel, id));
-    decl.add_ivar::<*mut c_void>(IVAR);
+    decl.add_ivar::<*mut c_void>(common::IVAR);
 
     common::RefClass(decl.register())
 }
 
 extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {
 	unsafe {
-        let saved: *mut c_void = *this.get_ivar(IVAR);
+        let saved: *mut c_void = *this.get_ivar(common::IVAR);
         let button: &mut Button = mem::transmute(saved.clone());
         msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
         if let Some(ref mut cb) = button.h_left_clicked {
@@ -314,7 +315,7 @@ extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {
 extern "C" fn button_right_click(this: &Object, _: Sel, param: id) {
     //println!("right!");
     unsafe {
-        let saved: *mut c_void = *this.get_ivar(IVAR);
+        let saved: *mut c_void = *this.get_ivar(common::IVAR);
         let button: &mut Button = mem::transmute(saved.clone());
         if let Some(ref mut cb) = button.h_right_clicked {
             let b2: &mut Button = mem::transmute(saved);
@@ -324,6 +325,7 @@ extern "C" fn button_right_click(this: &Object, _: Sel, param: id) {
     }
 }
 
+impl_invalidate!(Button);
 impl_is_control!(Button);
 impl_size!(Button);
 impl_member_id!(MEMBER_ID_BUTTON);

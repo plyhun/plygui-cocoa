@@ -8,6 +8,7 @@ use objc::declare::ClassDecl;
 
 use std::os::raw::c_void;
 
+use plygui_api::members::MEMBER_ID_APPLICATION;
 use plygui_api::traits::{UiWindow, UiApplication, UiMember};
 use plygui_api::types::WindowStartSize;
 use plygui_api::ids::Id;
@@ -30,7 +31,7 @@ impl Application {
                                        name: name.into(),
                                        windows: Vec::with_capacity(1),
                                    });
-            (&mut *app.app).set_ivar("plyguiApplication",
+            (&mut *app.app).set_ivar(common::IVAR,
                                      app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
             app.app
                 .setActivationPolicy_(NSApplicationActivationPolicyRegular);
@@ -96,9 +97,9 @@ impl Drop for Application {
 
 unsafe fn register_window_class() -> RefClass {
     let superclass = Class::get("NSApplication").unwrap();
-    let mut decl = ClassDecl::new("PlyguiApplication", superclass).unwrap();
+    let mut decl = ClassDecl::new(MEMBER_ID_APPLICATION, superclass).unwrap();
 
-    decl.add_ivar::<*mut c_void>("plyguiApplication");
+    decl.add_ivar::<*mut c_void>(common::IVAR);
 
     RefClass(decl.register())
 }

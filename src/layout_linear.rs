@@ -14,7 +14,6 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 
-pub const IVAR: &str = MEMBER_ID_LAYOUT_LINEAR;
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
 }
@@ -30,6 +29,7 @@ impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
         Box::new(LinearLayout {
                      base: common::CocoaControlBase::with_params(
+		                     	invalidate_impl,
                              	 development::UiMemberFunctions {
 		                             fn_member_id: member_id,
 								     fn_is_control: is_control,
@@ -131,7 +131,7 @@ impl UiControl for LinearLayout {
         unsafe {
         	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
 	        let base: cocoa_id = msg_send![base, initWithFrame: rect];
-	
+			self.base.coords = Some((x as i32, (ph - y - h) as i32));
 	        self.base.control = msg_send![base, autorelease];
 	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
 	
@@ -424,7 +424,7 @@ pub(crate) fn spawn() -> Box<UiControl> {
 
 unsafe fn register_window_class() -> RefClass {
     let superclass = Class::get("NSView").unwrap();
-    let mut decl = ClassDecl::new(IVAR, superclass).unwrap();
+    let mut decl = ClassDecl::new(MEMBER_ID_LAYOUT_LINEAR, superclass).unwrap();
 
     decl.add_ivar::<*mut c_void>(IVAR);
 
