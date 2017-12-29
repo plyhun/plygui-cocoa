@@ -270,37 +270,33 @@ unsafe fn register_delegate() -> RefClass {
     RefClass(decl.register())
 }
 
+fn window_redraw(this: &Object) {
+	unsafe {
+        let saved: *mut c_void = *this.get_ivar(IVAR);
+        let window: &mut Window = mem::transmute(saved.clone());
+        let size = window.size();
+
+        if let Some(ref mut child) = window.child {
+            let (_, h, _) = child.measure(size.0 as u16, size.1 as u16);
+            child.draw(Some((0, size.1 as i32 - h as i32))); //TODO padding
+        }
+        if let Some(ref mut cb) = window.h_resize {
+            let w2: &mut Window = mem::transmute(saved);
+            (cb.as_mut())(w2, size.0 as u16, size.1 as u16);
+        }
+    }
+}
+
 extern "C" fn application_should_terminate_after_last_window_closed(_: &Object, _: Sel, _: id) -> BOOL {
     YES
 }
 
 extern "C" fn window_did_resize(this: &Object, _: Sel, _: id) {
-    unsafe {
-        let saved: *mut c_void = *this.get_ivar(IVAR);
-        let window: &mut Window = mem::transmute(saved.clone());
-        let size = window.window.contentView().frame().size;
-
-        if let Some(ref mut child) = window.child {
-            let (_, h, _) = child.measure(size.width as u16, size.height as u16);
-            child.draw(Some((0, size.height as i32 - h as i32))); //TODO padding
-        }
-        if let Some(ref mut cb) = window.h_resize {
-            let w2: &mut Window = mem::transmute(saved);
-            (cb.as_mut())(w2, size.width as u16, size.height as u16);
-        }
-    }
+    window_redraw(this)
 }
 
 extern "C" fn window_did_change_screen(this: &Object, _: Sel, _: id) {
-    unsafe {
-        let saved: *mut c_void = *this.get_ivar(IVAR);
-        let window: &mut Window = mem::transmute(saved.clone());
-        if let Some(ref mut cb) = window.h_resize {
-            let size = window.window.contentView().frame().size;
-            let w2: &mut Window = mem::transmute(saved);
-            (cb.as_mut())(w2, size.width as u16, size.height as u16);
-        }
-    }
+    window_redraw(this)
 }
 extern "C" fn window_should_close(_: &Object, _: Sel, _: id) -> BOOL {
     YES

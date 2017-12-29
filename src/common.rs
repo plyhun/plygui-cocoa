@@ -249,6 +249,7 @@ macro_rules! impl_invalidate {
 	($typ: ty) => {
 		unsafe fn invalidate_impl(this: &mut common::CocoaControlBase) {
 			use plygui_api::development::UiDrawable;
+			use plygui_api::members::MEMBER_ID_WINDOW;
 			use objc::runtime::YES;
 			
 			let parent_hwnd = this.parent_cocoa_id();	
@@ -256,17 +257,22 @@ macro_rules! impl_invalidate {
 				let mparent = common::cast_cocoa_id_mut::<plygui_api::development::UiMemberCommon>(parent_hwnd).unwrap();
 				let (pw, ph) = mparent.size();
 				let this: &mut $typ = mem::transmute(this);
-				//let (_,_,changed) = 
+				
+				let (_,h,changed) = 
 				this.measure(pw, ph);
-				this.draw(None);		
-						
-				if mparent.is_control().is_some() {
-					let wparent = common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap();
-					//if changed {
-						wparent.invalidate();
-					//} 
+				
+				if changed {
+					if mparent.is_control().is_some() {
+						common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap().invalidate();
+					} else if mparent.member_id() == MEMBER_ID_WINDOW {
+						this.draw(Some((0, ph as i32 - h as i32)));	
+						msg_send![parent_hwnd, setNeedsDisplay:YES];
+					} else {
+						panic!("What are you?!");
+					}
+				} else {
+					this.draw(None);	
 				}
-				msg_send![parent_hwnd, setNeedsDisplay:YES];
 		    }
 		}
 	}

@@ -154,6 +154,7 @@ impl UiControl for Button {
 	        let base: id = msg_send![WINDOW_CLASS.0, alloc];
 	        let base: id = msg_send![base, initWithFrame: rect];
 	
+	        self.base.coords = Some((x as i32, (ph - y - h) as i32));
 	        self.base.control = msg_send![base, autorelease];
 
         	let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
@@ -228,7 +229,8 @@ impl development::UiDrawable for Button {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		unsafe {
+    		println!("draw btn {} at {}/{}", self.base.measured_size.1, x, y);
+	        unsafe {
 	            let mut frame: NSRect = self.base.frame();
 	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
 	                                     self.base.measured_size.1 as f64);

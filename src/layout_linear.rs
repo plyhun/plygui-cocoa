@@ -352,7 +352,7 @@ impl development::UiDrawable for LinearLayout {
 	        let mut x = 0;
 	        let mut y = 0;
 	        let my_h = self.size().1;
-	        println!("draw {} at {}/{}", my_h, x, y);
+	        println!("draw ll {} at {}/{}", my_h, x, y);
 	        for mut child in self.children.as_mut_slice() {
 	            let child_size = child.size();
 	            child.draw(Some((x, my_h as i32 - y - child_size.1 as i32)));      
