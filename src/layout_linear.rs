@@ -131,7 +131,7 @@ impl UiControl for LinearLayout {
         unsafe {
         	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
 	        let base: cocoa_id = msg_send![base, initWithFrame: rect];
-			self.base.coords = Some((x as i32, (ph - y - h) as i32));
+			self.base.coords = Some((x as i32, y as i32));
 	        self.base.control = msg_send![base, autorelease];
 	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
 	
@@ -341,21 +341,21 @@ impl development::UiDrawable for LinearLayout {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
+    		let (_, ph) = self.parent().unwrap().as_ref().size();
 	        unsafe {
 	        	let mut frame: NSRect = msg_send![self.base.control, frame];
 	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
 	                                     self.base.measured_size.1 as f64);
-	            frame.origin = NSPoint::new(x as f64, y as f64);
+	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
 	            msg_send![self.base.control, setFrame: frame];
 	        }
 	        
 	        let mut x = 0;
 	        let mut y = 0;
-	        let my_h = self.size().1;
-	        println!("draw ll {} at {}/{}", my_h, x, y);
+	        
 	        for mut child in self.children.as_mut_slice() {
 	            let child_size = child.size();
-	            child.draw(Some((x, my_h as i32 - y - child_size.1 as i32)));      
+	            child.draw(Some((x, y)));      
 	            match self.orientation {
 	                layout::Orientation::Horizontal => {
 	                    x += child_size.0 as i32
@@ -376,42 +376,50 @@ impl development::UiDrawable for LinearLayout {
 	    }
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    	use std::cmp::max;
+    	
     	let old_size = self.base.measured_size;
-        self.base.measured_size = match self.base.visibility() {
-	        types::Visibility::Gone => (0,0),
-	        _ => {
-	        	let mut w = parent_width;
+        self.base.measured_size = match self.visibility() {
+        	types::Visibility::Gone => (0,0),
+        	_ => {
+        		let mut w = parent_width;
 		        let mut h = parent_height;
 		
-		        if let layout::Size::Exact(ew) = self.base.control_base.layout.width {
+		        if let layout::Size::Exact(ew) = self.layout_width() {
 		            w = ew;
 		        }
-		        if let layout::Size::Exact(eh) = self.base.control_base.layout.height {
+		        if let layout::Size::Exact(eh) = self.layout_height() {
 		            w = eh;
 		        }
-		        if w == parent_width || h == parent_height {
-		            let mut ww = 0;
-		            let mut hh = 0;
-		            for ref mut child in self.children.as_mut_slice() {
-		                let (cw, ch,_) = child.measure(w, h);
-		                ww += cw;
-		                hh += ch;
-		            }
-		            match self.orientation {
-		                layout::Orientation::Vertical => {
-		                    if let layout::Size::WrapContent = self.base.control_base.layout.height {
-		                        h = hh;
-		                    }
+		        let (mut ww, mut wm, mut hh, mut hm) = (0, 0, 0, 0);
+		        for ref mut child in self.children.as_mut_slice() {
+                    let (cw, ch, _) = child.measure(w, h);
+                    ww += cw;
+                    hh += ch;
+                    wm = max(wm, cw);
+                    hm = max(hm, ch);
+                }
+		        
+		        match self.orientation {
+		            layout::Orientation::Vertical => {
+		                if let layout::Size::WrapContent = self.layout_height() {
+		                    h = hh;
+		                } 
+		                if let layout::Size::WrapContent = self.layout_width() {
+		                    w = wm;
 		                }
-		                layout::Orientation::Horizontal => {
-		                    if let layout::Size::WrapContent = self.base.control_base.layout.width {
-		                        w = ww;
-		                    }
+		            }
+		            layout::Orientation::Horizontal => {
+		                if let layout::Size::WrapContent = self.layout_height() {
+		                    h = hm;
+		                }
+		                if let layout::Size::WrapContent = self.layout_width() {
+		                    w = ww;
 		                }
 		            }
 		        }
 		        (w, h)
-	        }
+        	}
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }

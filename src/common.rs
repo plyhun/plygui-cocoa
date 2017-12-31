@@ -258,17 +258,16 @@ macro_rules! impl_invalidate {
 				let (pw, ph) = mparent.size();
 				let this: &mut $typ = mem::transmute(this);
 				
-				let (_,h,changed) = 
-				this.measure(pw, ph);
+				let (_,_,changed) = this.measure(pw, ph);
 				
 				if changed {
 					if mparent.is_control().is_some() {
 						common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap().invalidate();
 					} else if mparent.member_id() == MEMBER_ID_WINDOW {
-						this.draw(Some((0, ph as i32 - h as i32)));	
+						this.draw(None);	
 						msg_send![parent_hwnd, setNeedsDisplay:YES];
 					} else {
-						panic!("What are you?!");
+						panic!("Parent member {} is unsupported, neither a control, nor a window", mparent.member_id());
 					}
 				} else {
 					this.draw(None);	

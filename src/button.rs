@@ -229,12 +229,12 @@ impl development::UiDrawable for Button {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		println!("draw btn {} at {}/{}", self.base.measured_size.1, x, y);
-	        unsafe {
+    		let (_,ph) = self.parent().unwrap().as_ref().size();
+    		unsafe {
 	            let mut frame: NSRect = self.base.frame();
 	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
 	                                     self.base.measured_size.1 as f64);
-	            frame.origin = NSPoint::new(x as f64, y as f64);
+	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
 	            msg_send![self.base.control, setFrame: frame];
 	
 	            if let Some(ref mut cb) = self.base.h_resize {
