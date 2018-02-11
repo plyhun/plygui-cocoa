@@ -9,9 +9,11 @@ use objc::declare::ClassDecl;
 
 use std::mem;
 use std::os::raw::c_void;
+use std::borrow::Cow;
+use std::ffi::CString;
 
 use plygui_api::{development, ids, types, callbacks};
-use plygui_api::traits::{UiControl, UiWindow, UiSingleContainer, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiHasLabel, UiWindow, UiSingleContainer, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_WINDOW;
 
 const BASE_CLASS: &str = "NSWindow";
@@ -92,6 +94,22 @@ impl Window {
 
             window
         }
+    }
+}
+
+impl UiHasLabel for Window {
+	fn label<'a>(&'a self) -> Cow<'a, str> {
+		unsafe { 
+			let title: id = msg_send![self.container, getTitle];
+			let title = msg_send![title, UTF8String];
+			Cow::Owned(CString::from_raw(title).into_string().unwrap())
+		}
+	}
+    fn set_label(&mut self, label: &str) {
+	    	unsafe {
+	    		let label = NSString::alloc(cocoa::base::nil).init_str(label);
+	        self.container.setTitle_(label)
+	    	}
     }
 }
 

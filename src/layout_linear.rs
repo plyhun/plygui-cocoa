@@ -2,7 +2,7 @@ use super::*;
 use super::common::*;
 
 use plygui_api::{layout, ids, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiLayable, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiHasLayout, UiHasOrientation, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use self::cocoa::appkit::NSView;
@@ -73,9 +73,9 @@ impl UiMember for LinearLayout {
     }
 }
 
-impl UiLayable for LinearLayout {
+impl UiHasLayout for LinearLayout {
 	fn layout_width(&self) -> layout::Size {
-    	self.base.control_base.layout.width
+	    	self.base.control_base.layout.width
     }
 	fn layout_height(&self) -> layout::Size {
 		self.base.control_base.layout.height
@@ -83,13 +83,24 @@ impl UiLayable for LinearLayout {
 	fn layout_gravity(&self) -> layout::Gravity {
 		self.base.control_base.layout.gravity
 	}
-	fn layout_orientation(&self) -> layout::Orientation {
-		self.base.control_base.layout.orientation
-	}
 	fn layout_alignment(&self) -> layout::Alignment {
 		self.base.control_base.layout.alignment
 	}
-	
+	fn layout_padding(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.padding
+	}
+    fn layout_margin(&self) -> layout::BoundarySize {
+	    	self.base.control_base.layout.margin
+    }
+
+    fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
+	    	self.base.control_base.layout.padding = padding.into();
+		self.base.invalidate();
+    }
+    fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
+	    	self.base.control_base.layout.margin = margin.into();
+		self.base.invalidate();
+    }
 	fn set_layout_width(&mut self, width: layout::Size) {
 		self.base.control_base.layout.width = width;
 		self.base.invalidate();
@@ -100,10 +111,6 @@ impl UiLayable for LinearLayout {
 	}
 	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
 		self.base.control_base.layout.gravity = gravity;
-		self.base.invalidate();
-	}
-	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.base.control_base.layout.orientation = orientation;
 		self.base.invalidate();
 	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
@@ -119,13 +126,13 @@ impl UiLayable for LinearLayout {
 }
 
 impl UiControl for LinearLayout {
-    fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
+    fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
     	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.size();
         let (w, h, _) = self.measure(pw, ph);
 
-        let rect = NSRect::new(NSPoint::new(x as f64, (ph - y - h) as f64),
+        let rect = NSRect::new(NSPoint::new(x as f64, (ph as i32 - y - h as i32) as f64),
                                NSSize::new(w as f64, h as f64));
 
         unsafe {
@@ -143,11 +150,11 @@ impl UiControl for LinearLayout {
 	            match self.orientation {
 	                layout::Orientation::Horizontal => {
 	                    child.on_added_to_container(ll2, x, y);
-	                    x += xx;
+	                    x += xx as i32;
 	                }
 	                layout::Orientation::Vertical => {
 	                    child.on_added_to_container(ll2, x, y);
-	                    y += yy;
+	                    y += yy as i32;
 	                }
 	            }
 	            ll2.base.control.addSubview_(child.native_id() as cocoa_id);
@@ -187,10 +194,10 @@ impl UiControl for LinearLayout {
     	fill_from_markup_base!(self, markup, registry, LinearLayout, [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]);
 		fill_from_markup_children!(self, markup, registry);		
     }
-    fn as_layable(&self) -> &UiLayable {
+    fn as_has_layout(&self) -> &UiHasLayout {
     	self
     }
-	fn as_layable_mut(&mut self) -> &mut UiLayable {
+	fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
 		self
 	}
 }
@@ -228,11 +235,11 @@ impl UiMultiContainer for LinearLayout {
                 let (_,yy) = new.size();
                 match self.orientation {
                     layout::Orientation::Horizontal => {
-                        new.on_added_to_container(self, x, y); //TODO padding
+                        new.on_added_to_container(self, x as i32, y as i32); //TODO padding
                     }
                     layout::Orientation::Vertical => {
                         let my_h = self.size().1;
-                        new.on_added_to_container(self, x, my_h - y - yy); //TODO padding
+                        new.on_added_to_container(self, x as i32, my_h as i32 - y as i32 - yy as i32); //TODO padding
                     }
                 }
                 self.base.control.addSubview_(new.native_id() as cocoa_id);
@@ -314,15 +321,18 @@ impl UiContainer for LinearLayout {
 	}
 }
 
-impl UiLinearLayout for LinearLayout {
-    fn orientation(&self) -> layout::Orientation {
+impl UiHasOrientation for LinearLayout {
+	fn layout_orientation(&self) -> layout::Orientation {
         self.orientation
     }
-    fn set_orientation(&mut self, orientation: layout::Orientation) {
+    fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
         self.orientation = orientation;
     }
+}
+
+impl UiLinearLayout for LinearLayout {
     fn as_control(&self) -> &UiControl {
-    	self
+	    	self
     }
 	fn as_control_mut(&mut self) -> &mut UiControl {
 		self
@@ -331,6 +341,12 @@ impl UiLinearLayout for LinearLayout {
 		self
 	}
 	fn as_multi_container_mut(&mut self) -> &mut UiMultiContainer {
+		self
+	}
+	fn as_has_orientation(&self) -> &UiHasOrientation {
+		self
+	}
+	fn as_has_orientation_mut(&mut self) -> &mut UiHasOrientation {
 		self
 	}
 }

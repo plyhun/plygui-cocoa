@@ -51,8 +51,8 @@ impl UiApplication for Application {
         self.windows.push(w.window);
         w
     }
-    fn name(&self) -> &str {
-        self.name.as_ref()
+    fn name<'a>(&'a self) -> ::std::borrow::Cow<'a, str> {
+        ::std::borrow::Cow::Borrowed(self.name.as_ref())
     }
     fn start(&mut self) {
         unsafe { self.app.run() };

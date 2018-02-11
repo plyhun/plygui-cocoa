@@ -33,12 +33,11 @@ impl CocoaControlBase {
 		CocoaControlBase {
         	control_base: development::UiControlCommon {
 	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
-		        layout: development::layout::LayoutBase {
+		        layout: layout::Attributes {
 		            width: layout::Size::MatchParent,
 					height: layout::Size::WrapContent,
 					gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-					orientation: layout::Orientation::Vertical,
-					alignment: layout::Alignment::None,
+					..Default::default()
 	            },
         	},
         	control: ptr::null_mut(),

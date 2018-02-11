@@ -1,7 +1,7 @@
 use super::*;
 
 use plygui_api::{layout, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiLayable, UiButton, UiMember, UiContainer};
+use plygui_api::traits::{UiControl, UiHasLayout, UiClickable, UiHasLabel, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
 use self::cocoa::appkit::{NSBezelStyle, NSButton};
@@ -12,6 +12,7 @@ use objc::declare::ClassDecl;
 
 use std::mem;
 use std::os::raw::c_void;
+use std::borrow::Cow;
 
 lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
@@ -48,35 +49,51 @@ impl Button {
     }
 }
 
-impl UiButton for Button {
-    fn label(&self) -> &str {
-        self.label.as_ref()
+impl UiHasLabel for Button {
+	fn label<'a>(&'a self) -> Cow<'a,str> {
+        Cow::Borrowed(self.label.as_ref())
     }
     fn set_label(&mut self, label: &str) {
-    	self.label = label.into();
-    	if self.base.control != 0 as id {
-    		unsafe {
-    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-	    		self.base.control.setTitle_(title);
-    		}
-    	}
+	    	self.label = label.into();
+	    	if self.base.control != 0 as id {
+	    		unsafe {
+	    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
+		    		self.base.control.setTitle_(title);
+	    		}
+	    	}
     }
-    fn on_left_click(&mut self, cb: Option<callbacks::Click>) {
+}
+impl UiClickable for Button {
+	fn on_click(&mut self, cb: Option<callbacks::Click>) {
         self.h_left_clicked = cb;
     }
+}
+impl UiButton for Button {
     /*fn on_right_click(&mut self, cb: Option<Box<FnMut(&mut UiButton)>>) {
         self.h_right_clicked = cb;
     }*/
     
     fn as_control(&self) -> &UiControl {
-    	self
+	    	self
     }
 	fn as_control_mut(&mut self) -> &mut UiControl {
 		self
 	}
+	fn as_clickable(&self) -> &UiClickable {
+	    	self
+    }
+	fn as_clickable_mut(&mut self) -> &mut UiClickable {
+		self
+	}
+	fn as_has_label(&self) -> &UiHasLabel {
+	    	self
+    }
+	fn as_has_label_mut(&mut self) -> &mut UiHasLabel {
+		self
+	}
 }
 
-impl UiLayable for Button {
+impl UiHasLayout for Button {
 	fn layout_width(&self) -> layout::Size {
     	self.base.control_base.layout.width
     }
@@ -86,13 +103,24 @@ impl UiLayable for Button {
 	fn layout_gravity(&self) -> layout::Gravity {
 		self.base.control_base.layout.gravity
 	}
-	fn layout_orientation(&self) -> layout::Orientation {
-		self.base.control_base.layout.orientation
-	}
 	fn layout_alignment(&self) -> layout::Alignment {
 		self.base.control_base.layout.alignment
 	}
-	
+	fn layout_padding(&self) -> layout::BoundarySize {
+		self.base.control_base.layout.padding
+	}
+    fn layout_margin(&self) -> layout::BoundarySize {
+	    	self.base.control_base.layout.margin
+    }
+
+    fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
+	    	self.base.control_base.layout.padding = padding.into();
+		self.base.invalidate();
+    }
+    fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
+	    	self.base.control_base.layout.margin = margin.into();
+		self.base.invalidate();
+    }
 	fn set_layout_width(&mut self, width: layout::Size) {
 		self.base.control_base.layout.width = width;
 		self.base.invalidate();
@@ -103,10 +131,6 @@ impl UiLayable for Button {
 	}
 	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
 		self.base.control_base.layout.gravity = gravity;
-		self.base.invalidate();
-	}
-	fn set_layout_orientation(&mut self, orientation: layout::Orientation) {
-		self.base.control_base.layout.orientation = orientation;
 		self.base.invalidate();
 	}
 	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
@@ -141,20 +165,20 @@ impl UiControl for Button {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
-    fn on_added_to_container(&mut self, parent: &UiContainer, x: u16, y: u16) {
-    	use plygui_api::development::UiDrawable;
+    fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
+	    	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.size();
         let (w, h, _) = self.measure(pw, ph);
 
-        let rect = NSRect::new(NSPoint::new(x as f64, (ph - y - h) as f64),
+        let rect = NSRect::new(NSPoint::new(x as f64, (ph as i32 - y - h as i32) as f64),
                                NSSize::new(w as f64, h as f64));
 
         unsafe {
 	        let base: id = msg_send![WINDOW_CLASS.0, alloc];
 	        let base: id = msg_send![base, initWithFrame: rect];
 	
-	        self.base.coords = Some((x as i32, (ph - y - h) as i32));
+	        self.base.coords = Some((x as i32, (ph as i32 - y - h as i32) as i32));
 	        self.base.control = msg_send![base, autorelease];
 
         	let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
@@ -184,10 +208,10 @@ impl UiControl for Button {
     		self.on_left_click(Some(callback));
     	}
     }
-    fn as_layable(&self) -> &UiLayable {
+    fn as_has_layout(&self) -> &UiHasLayout {
     	self
     }
-	fn as_layable_mut(&mut self) -> &mut UiLayable {
+	fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
 		self
 	}
 }
