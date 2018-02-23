@@ -269,8 +269,6 @@ unsafe fn register_delegate() -> RefClass {
     let superclass = Class::get("NSObject").unwrap();
     let mut decl = ClassDecl::new("PlyguiWindowDelegate", superclass).unwrap();
 
-    decl.add_method(sel!(applicationShouldTerminateAfterLastWindowClosed:),
-                    application_should_terminate_after_last_window_closed as extern "C" fn(&Object, Sel, id) -> BOOL);
     decl.add_method(sel!(windowShouldClose:),
                     window_should_close as extern "C" fn(&Object, Sel, id) -> BOOL);
     decl.add_method(sel!(windowDidResize:),
@@ -295,7 +293,7 @@ fn window_redraw(this: &Object) {
         let size = window.size();
 
         if let Some(ref mut child) = window.child {
-            let (_, h, _) = child.measure(size.0 as u16, size.1 as u16);
+            child.measure(size.0 as u16, size.1 as u16);
             child.draw(Some((0, 0))); //TODO padding
         }
         if let Some(ref mut cb) = window.h_resize {
@@ -303,10 +301,6 @@ fn window_redraw(this: &Object) {
             (cb.as_mut())(w2, size.0 as u16, size.1 as u16);
         }
     }
-}
-
-extern "C" fn application_should_terminate_after_last_window_closed(_: &Object, _: Sel, _: id) -> BOOL {
-    YES
 }
 
 extern "C" fn window_did_resize(this: &Object, _: Sel, _: id) {

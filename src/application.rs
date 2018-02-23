@@ -3,7 +3,7 @@ use super::common::*;
 
 use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicyRegular};
 use self::cocoa::base::{id};
-use objc::runtime::{Class};
+use objc::runtime::{Class, Object, Sel, BOOL, YES};
 use objc::declare::ClassDecl;
 
 use std::os::raw::c_void;
@@ -15,6 +15,7 @@ use plygui_api::ids::Id;
 
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
+	static ref DELEGATE: RefClass = unsafe { register_delegate() };
 }
 
 pub struct Application {
@@ -33,15 +34,14 @@ impl Application {
                                    });
             (&mut *app.app).set_ivar(common::IVAR,
                                      app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            app.app
-                .setActivationPolicy_(NSApplicationActivationPolicyRegular);
+            let delegate: *mut Object = msg_send!(DELEGATE.0, new);
+            (&mut *delegate).set_ivar(IVAR,
+                                      app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
+            msg_send!(app.app, setDelegate:delegate);
+
+			app.app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
             app
         }
-    }
-
-    pub(crate) fn on_window_closed(&mut self) {
-        println!("App closed");
-        //unsafe { msg_send![class("NSApp"), terminate:self]; }
     }
 }
 
@@ -95,6 +95,17 @@ impl Drop for Application {
     }
 }
 
+unsafe fn register_delegate() -> RefClass {
+    let superclass = Class::get("NSObject").unwrap();
+    let mut decl = ClassDecl::new("PlyguiApplicationDelegate", superclass).unwrap();
+
+    decl.add_method(sel!(applicationShouldTerminateAfterLastWindowClosed:),
+                    application_should_terminate_after_last_window_closed as extern "C" fn(&Object, Sel, id) -> BOOL);
+    decl.add_ivar::<*mut c_void>(IVAR);
+
+    RefClass(decl.register())
+}
+
 unsafe fn register_window_class() -> RefClass {
     let superclass = Class::get("NSApplication").unwrap();
     let mut decl = ClassDecl::new(MEMBER_ID_APPLICATION, superclass).unwrap();
@@ -102,4 +113,8 @@ unsafe fn register_window_class() -> RefClass {
     decl.add_ivar::<*mut c_void>(common::IVAR);
 
     RefClass(decl.register())
+}
+
+extern "C" fn application_should_terminate_after_last_window_closed(_: &Object, _: Sel, _: id) -> BOOL {
+    YES
 }
