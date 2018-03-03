@@ -86,7 +86,7 @@ impl UiButton for Button {
 		self
 	}
 	fn as_has_label(&self) -> &UiHasLabel {
-	    	self
+	    self
     }
 	fn as_has_label_mut(&mut self) -> &mut UiHasLabel {
 		self
@@ -110,15 +110,15 @@ impl UiHasLayout for Button {
 		self.base.control_base.layout.padding
 	}
     fn layout_margin(&self) -> layout::BoundarySize {
-	    	self.base.control_base.layout.margin
+	    self.base.control_base.layout.margin
     }
 
     fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
-	    	self.base.control_base.layout.padding = padding.into();
+	    self.base.control_base.layout.padding = padding.into();
 		self.base.invalidate();
     }
     fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
-	    	self.base.control_base.layout.margin = margin.into();
+	    self.base.control_base.layout.margin = margin.into();
 		self.base.invalidate();
     }
 	fn set_layout_width(&mut self, width: layout::Size) {
@@ -166,7 +166,7 @@ impl UiControl for Button {
         self.base.root_mut()
     }
     fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
-	    	use plygui_api::development::UiDrawable;
+	    use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.size();
         let (w, h, _) = self.measure(pw, ph);
@@ -260,14 +260,13 @@ impl development::UiDrawable for Button {
 	                                     self.base.measured_size.1 as f64);
 	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
 	            msg_send![self.base.control, setFrame: frame];
-	
-	            if let Some(ref mut cb) = self.base.h_resize {
+	        }
+    		if let Some(ref mut cb) = self.base.h_resize {
+	            unsafe {
 	                let object: &Object = mem::transmute(self.base.control);
 	                let saved: *mut c_void = *object.get_ivar(common::IVAR);
-	                let mut button2: &mut Button = mem::transmute(saved);
-	                (cb.as_mut())(button2,
-	                     self.base.measured_size.0,
-	                     self.base.measured_size.1);
+	                let mut ll2: &mut Button = mem::transmute(saved);
+	                (cb.as_mut())(ll2, self.base.measured_size.0, self.base.measured_size.1);
 	            }
 	        }
     	}

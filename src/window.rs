@@ -100,16 +100,16 @@ impl Window {
 impl UiHasLabel for Window {
 	fn label<'a>(&'a self) -> Cow<'a, str> {
 		unsafe { 
-			let title: id = msg_send![self.container, getTitle];
+			let title: id = msg_send![self.window, title];
 			let title = msg_send![title, UTF8String];
 			Cow::Owned(CString::from_raw(title).into_string().unwrap())
 		}
 	}
     fn set_label(&mut self, label: &str) {
-	    	unsafe {
-	    		let label = NSString::alloc(cocoa::base::nil).init_str(label);
-	        self.container.setTitle_(label)
-	    	}
+    	unsafe {
+    		let label = NSString::alloc(cocoa::base::nil).init_str(label);
+	        self.window.setTitle_(label)
+    	}
     }
 }
 
