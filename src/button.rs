@@ -18,7 +18,7 @@ lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
 }
 
-const PADDING: u16 = 15;
+const DEFAULT_PADDING: u16 = 6;
 const BASE_CLASS: &str = "NSButton";
 
 #[repr(C)]
@@ -283,8 +283,8 @@ impl development::UiDrawable for Button {
                     layout::Size::WrapContent => {
                         if label_size.0 < 1 {
                             label_size = common::measure_string(self.label.as_ref());
-                            label_size.0 += PADDING;
-                            label_size.1 += PADDING;
+                            label_size.0 += DEFAULT_PADDING;
+                            label_size.1 += DEFAULT_PADDING;
                         }
                         label_size.0 as u16
                     } 
@@ -295,8 +295,8 @@ impl development::UiDrawable for Button {
                     layout::Size::WrapContent => {
                         if label_size.1 < 1 {
                             label_size = common::measure_string(self.label.as_ref());
-                            label_size.0 += PADDING;
-                            label_size.1 += PADDING;
+                            label_size.0 += DEFAULT_PADDING;
+                            label_size.1 += DEFAULT_PADDING;
                         }
                         label_size.1 as u16
                     } 

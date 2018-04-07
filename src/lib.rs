@@ -17,7 +17,7 @@ mod application;
 mod window;
 mod button;
 mod layout_linear;
-//mod layout_relative;
+mod frame;
 
 pub type NativeId = cocoa::base::id;
 
@@ -25,7 +25,7 @@ pub use self::application::Application;
 pub use self::window::Window;
 pub use self::button::Button;
 pub use self::layout_linear::LinearLayout;
-//pub use self::layout_relative::RelativeLayout;
+pub use self::frame::Frame;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {

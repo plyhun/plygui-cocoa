@@ -10,7 +10,7 @@ use std::os::raw::c_void;
 
 use plygui_api::members::MEMBER_ID_APPLICATION;
 use plygui_api::traits::{UiWindow, UiApplication, UiMember};
-use plygui_api::types::WindowStartSize;
+use plygui_api::types::{WindowMenu, WindowStartSize};
 use plygui_api::ids::Id;
 
 lazy_static! {
@@ -20,6 +20,7 @@ lazy_static! {
 
 pub struct Application {
     app: id,
+    delegate: id,
     name: String,
     windows: Vec<id>,
 }
@@ -29,15 +30,14 @@ impl Application {
         unsafe {
             let mut app = Box::new(Application {
                                        app: msg_send![WINDOW_CLASS.0, sharedApplication],
-                                       name: name.into(),
+                                       delegate: msg_send!(DELEGATE.0, new),
+                                       name: name.to_owned(),
                                        windows: Vec::with_capacity(1),
                                    });
-            (&mut *app.app).set_ivar(common::IVAR,
-                                     app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            let delegate: *mut Object = msg_send!(DELEGATE.0, new);
-            (&mut *delegate).set_ivar(IVAR,
-                                      app.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            msg_send!(app.app, setDelegate:delegate);
+            let selfptr = app.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+            (&mut *app.app).set_ivar(common::IVAR, selfptr);
+            (&mut *app.delegate).set_ivar(IVAR, selfptr);
+            msg_send!(app.app, setDelegate: app.delegate);
 
 			app.app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
             app
@@ -46,8 +46,8 @@ impl Application {
 }
 
 impl UiApplication for Application {
-    fn new_window(&mut self, title: &str, size: WindowStartSize, has_menu: bool) -> Box<UiWindow> {
-        let w = Window::new(title, size, has_menu);
+    fn new_window(&mut self, title: &str, size: WindowStartSize, menu: WindowMenu) -> Box<UiWindow> {
+        let w = Window::new(title, size, menu);
         self.windows.push(w.window);
         w
     }
@@ -91,6 +91,7 @@ impl Drop for Application {
     fn drop(&mut self) {
         unsafe {
             msg_send![self.app, dealloc];
+            msg_send![self.delegate, dealloc];
         }
     }
 }

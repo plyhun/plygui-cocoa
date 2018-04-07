@@ -38,7 +38,7 @@ impl Window {
     pub(crate) fn new(
                       title: &str,
                       start_size: types::WindowStartSize,
-                      has_menu: bool)
+                      menu: types::WindowMenu)
                       -> Box<Window> {
         use self::cocoa::appkit::NSView;
 
