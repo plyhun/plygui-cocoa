@@ -18,7 +18,7 @@ lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
 }
 
-const DEFAULT_PADDING: u16 = 6;
+const DEFAULT_PADDING: i32 = 6;
 const BASE_CLASS: &str = "NSButton";
 
 #[repr(C)]
@@ -32,7 +32,7 @@ pub struct Button {
 
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
-        Box::new(Button {
+        let mut b = Box::new(Button {
                      base: common::CocoaControlBase::with_params(
 		                     	invalidate_impl,
                              	development::UiMemberFunctions {
@@ -45,7 +45,9 @@ impl Button {
                      label: label.to_owned(),
                      h_left_clicked: None,
                      h_right_clicked: None,
-                 })
+                 });
+        b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+        b
     }
 }
 
@@ -58,7 +60,8 @@ impl UiHasLabel for Button {
 	    	if self.base.control != 0 as id {
 	    		unsafe {
 	    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-		    		self.base.control.setTitle_(title);
+		    		let () = msg_send![self.base.control, setTitle:title];
+                                let () = msg_send![title, release];
 	    		}
 	    	}
     }
@@ -168,11 +171,12 @@ impl UiControl for Button {
     fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
 	    use plygui_api::development::UiDrawable;
     	
-        let (pw, ph) = parent.size();
+        let (pw, ph) = parent.draw_area_size();
         let (w, h, _) = self.measure(pw, ph);
-
-        let rect = NSRect::new(NSPoint::new(x as f64, (ph as i32 - y - h as i32) as f64),
-                               NSSize::new(w as f64, h as f64));
+		let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        
+        let rect = NSRect::new(NSPoint::new((x as i32 + lm) as f64, (ph as i32 - y - h as i32 - tm) as f64),
+                               NSSize::new((w as i32 - lm - rm) as f64, (h as i32 - tm - bm) as f64));
 
         unsafe {
 	        let base: id = msg_send![WINDOW_CLASS.0, alloc];
@@ -182,13 +186,11 @@ impl UiControl for Button {
 	        self.base.control = msg_send![base, autorelease];
 
         	let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-	        self.base.control.setTitle_(title);
-	        self.base
-	            .control
-	            .setBezelStyle_(NSBezelStyle::NSSmallSquareBezelStyle);
+	        let () = msg_send![self.base.control, setTitle:title];
+	        let () = msg_send![self.base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle];
 	
 	        (&mut *self.base.control).set_ivar(common::IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
-	        msg_send![title, release];
+	        let () = msg_send![title, release];
         }
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
@@ -253,13 +255,14 @@ impl development::UiDrawable for Button {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (_,ph) = self.parent().unwrap().as_ref().size();
+    		let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+	        let (_,ph) = self.parent().unwrap().as_ref().size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
-	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
-	                                     self.base.measured_size.1 as f64);
-	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
-	            msg_send![self.base.control, setFrame: frame];
+	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
+	                                     (self.base.measured_size.1 as i32 - tm - bm) as f64);
+	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
+	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
     		if let Some(ref mut cb) = self.base.h_resize {
 	            unsafe {
@@ -272,36 +275,35 @@ impl development::UiDrawable for Button {
     	}
     }
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    	use std::cmp::max;
+    	
     	let old_size = self.base.measured_size;
-        self.base.measured_size = match self.visibility() {
+        let (lp, tp, rp, bp) = self.base.control_base.layout.padding.into();
+        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+
+		self.base.measured_size = match self.visibility() {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size = (0, 0);
                 let w = match self.base.control_base.layout.width {
-                    layout::Size::MatchParent => parent_width,
-                    layout::Size::Exact(w) => w,
+                    layout::Size::MatchParent => parent_width as i32,
+                    layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
-                        if label_size.0 < 1 {
-                            label_size = common::measure_string(self.label.as_ref());
-                            label_size.0 += DEFAULT_PADDING;
-                            label_size.1 += DEFAULT_PADDING;
-                        }
-                        label_size.0 as u16
+                        label_size = common::measure_string(self.label.as_ref());
+                        label_size.0 as i32 + lm + rm + lp + rp
                     } 
                 };
                 let h = match self.base.control_base.layout.height {
-                    layout::Size::MatchParent => parent_height,
-                    layout::Size::Exact(h) => h,
+                    layout::Size::MatchParent => parent_height as i32,
+                    layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
                         if label_size.1 < 1 {
                             label_size = common::measure_string(self.label.as_ref());
-                            label_size.0 += DEFAULT_PADDING;
-                            label_size.1 += DEFAULT_PADDING;
                         }
-                        label_size.1 as u16
+                        label_size.1 as i32 + tm + bm + tp + bp
                     } 
                 };
-                (w, h)
+                (max(0, w) as u16, max(0, h) as u16)
             },
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
@@ -330,7 +332,7 @@ extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {
 	unsafe {
         let saved: *mut c_void = *this.get_ivar(common::IVAR);
         let button: &mut Button = mem::transmute(saved.clone());
-        msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
+        let () = msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
         if let Some(ref mut cb) = button.h_left_clicked {
             let b2: &mut Button = mem::transmute(saved);
             (cb.as_mut())(b2);
@@ -346,7 +348,7 @@ extern "C" fn button_right_click(this: &Object, _: Sel, param: id) {
             let b2: &mut Button = mem::transmute(saved);
             (cb.as_mut())(b2);
         }
-        msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
+        let () = msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
     }
 }
 

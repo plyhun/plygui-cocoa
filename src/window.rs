@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use self::cocoa::appkit::{NSWindow, NSRunningApplication, NSClosableWindowMask, NSResizableWindowMask, NSMiniaturizableWindowMask, NSTitledWindowMask, NSBackingStoreBuffered};
+use self::cocoa::appkit::{NSWindow, NSRunningApplication, NSWindowStyleMask, NSBackingStoreBuffered};
 use self::cocoa::foundation::{NSString, NSAutoreleasePool, NSRect, NSSize, NSPoint};
 use self::cocoa::base::{id, nil};
 use objc::runtime::{Class, Object, Sel, BOOL, YES, NO};
@@ -51,22 +51,22 @@ impl Window {
         	let window: id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window
                 .initWithContentRect_styleMask_backing_defer_(rect,
-                                                              NSClosableWindowMask | NSResizableWindowMask | NSMiniaturizableWindowMask | NSTitledWindowMask,
+                                                              NSWindowStyleMask::NSClosableWindowMask | NSWindowStyleMask::NSResizableWindowMask | NSWindowStyleMask::NSMiniaturizableWindowMask | NSWindowStyleMask::NSTitledWindowMask,
                                                               NSBackingStoreBuffered,
                                                               NO)
                 .autorelease();
-            window.cascadeTopLeftFromPoint_(NSPoint::new(20., 20.));
+            let () = msg_send![window ,cascadeTopLeftFromPoint: NSPoint::new(20., 20.)];
             window.center();
             let title = NSString::alloc(cocoa::base::nil).init_str(title);
-            window.setTitle_(title);
-            window.makeKeyAndOrderFront_(cocoa::base::nil);
+            let () = msg_send![window, setTitle: title];
+            let () = msg_send![window, makeKeyAndOrderFront: cocoa::base::nil];
             let current_app = cocoa::appkit::NSRunningApplication::currentApplication(cocoa::base::nil);
-            current_app.activateWithOptions_(cocoa::appkit::NSApplicationActivateIgnoringOtherApps);
+            let () = msg_send![current_app, activateWithOptions: cocoa::appkit::NSApplicationActivateIgnoringOtherApps];
 
             let view = NSView::alloc(nil)
                 .initWithFrame_(rect)
                 .autorelease();
-            window.setContentView_(view);
+            let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(Window {
 							            base: development::UiMemberCommon::with_params(
@@ -90,7 +90,7 @@ impl Window {
                                       window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
             (&mut *window.window).set_ivar(IVAR,
                                       window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            window.window.setDelegate_(delegate);
+            let () = msg_send![window.window, setDelegate: delegate];
 
             window
         }
@@ -108,7 +108,7 @@ impl UiHasLabel for Window {
     fn set_label(&mut self, label: &str) {
     	unsafe {
     		let label = NSString::alloc(cocoa::base::nil).init_str(label);
-	        self.window.setTitle_(label)
+	        let () = msg_send![self.window, setTitle: label];
     	}
     }
 }
@@ -134,7 +134,7 @@ impl UiSingleContainer for Window {
             if let Some(new) = child.as_mut() {
             	let (_, _) = self.size();
                 new.on_added_to_container(self, 0, 0); //TODO padding
-                self.container.addSubview_(new.native_id() as id); 
+                let () = msg_send![self.container, addSubview: new.native_id() as id];
             }
             self.child = child;
 
@@ -201,11 +201,11 @@ impl UiMember for Window {
     fn set_visibility(&mut self, visibility: types::Visibility) {
         self.base.visibility = visibility;
         unsafe {
-            if types::Visibility::Visible == visibility {
-                msg_send![self.window, setIsVisible: YES];
+            let () = if types::Visibility::Visible == visibility {
+                msg_send![self.window, setIsVisible: YES]
             } else {
-                msg_send![self.window, setIsVisible: NO];
-            }
+                msg_send![self.window, setIsVisible: NO]
+            };
         }
     }
     fn visibility(&self) -> types::Visibility {
@@ -241,8 +241,8 @@ impl UiMember for Window {
 impl Drop for Window {
     fn drop(&mut self) {
         unsafe {
-            msg_send![self.container, dealloc];
-            msg_send![self.window, dealloc];
+            let () = msg_send![self.container, dealloc];
+            let () = msg_send![self.window, dealloc];
         }
     }
 }

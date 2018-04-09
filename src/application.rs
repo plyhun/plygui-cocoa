@@ -20,7 +20,7 @@ lazy_static! {
 
 pub struct Application {
     app: id,
-    delegate: id,
+    delegate: *mut Object,
     name: String,
     windows: Vec<id>,
 }
@@ -37,9 +37,8 @@ impl Application {
             let selfptr = app.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
             (&mut *app.app).set_ivar(common::IVAR, selfptr);
             (&mut *app.delegate).set_ivar(IVAR, selfptr);
-            msg_send!(app.app, setDelegate: app.delegate);
-
-			app.app.setActivationPolicy_(NSApplicationActivationPolicyRegular);
+            let () = msg_send![app.app, setDelegate: app.delegate];
+            let () = msg_send![app.app, setActivationPolicy:NSApplicationActivationPolicyRegular];
             app
         }
     }
@@ -90,8 +89,8 @@ impl UiApplication for Application {
 impl Drop for Application {
     fn drop(&mut self) {
         unsafe {
-            msg_send![self.app, dealloc];
-            msg_send![self.delegate, dealloc];
+            let () = msg_send![self.app, dealloc];
+            let () = msg_send![self.delegate, dealloc];
         }
     }
 }

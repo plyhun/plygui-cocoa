@@ -5,7 +5,6 @@ use plygui_api::{layout, ids, types, development, callbacks};
 use plygui_api::traits::{UiControl, UiHasLayout, UiHasOrientation, UiMultiContainer, UiLinearLayout, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
-use self::cocoa::appkit::NSView;
 use self::cocoa::foundation::{NSRect, NSSize, NSPoint};
 use self::cocoa::base::id as cocoa_id;
 use objc::runtime::{Class, Object};
@@ -17,6 +16,7 @@ use std::os::raw::c_void;
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
 }
+const DEFAULT_PADDING: i32 = 6;
 
 #[repr(C)]
 pub struct LinearLayout {
@@ -27,9 +27,9 @@ pub struct LinearLayout {
 
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
-        Box::new(LinearLayout {
+        let mut ll = Box::new(LinearLayout {
                      base: common::CocoaControlBase::with_params(
-		                     	invalidate_impl,
+			                     invalidate_impl,
                              	 development::UiMemberFunctions {
 		                             fn_member_id: member_id,
 								     fn_is_control: is_control,
@@ -39,7 +39,9 @@ impl LinearLayout {
                              ),
                      orientation: orientation,
                      children: Vec::new(),
-                 })
+                 });
+        ll.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+        ll
     }
 }
 impl UiMember for LinearLayout {
@@ -129,11 +131,13 @@ impl UiControl for LinearLayout {
     fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
     	use plygui_api::development::UiDrawable;
     	
-        let (pw, ph) = parent.size();
+        let (pw, ph) = parent.draw_area_size();
         let (w, h, _) = self.measure(pw, ph);
-
-        let rect = NSRect::new(NSPoint::new(x as f64, (ph as i32 - y - h as i32) as f64),
-                               NSSize::new(w as f64, h as f64));
+		let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
+        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        
+        let rect = NSRect::new(NSPoint::new((x + lm) as f64, (ph as i32 - y - tm - h as i32) as f64),
+                               NSSize::new((w as i32 - rm - lm) as f64, (h as i32 - tm - bm) as f64));
 
         unsafe {
         	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
@@ -142,22 +146,21 @@ impl UiControl for LinearLayout {
 	        self.base.control = msg_send![base, autorelease];
 	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
 	
-	        let mut x = 0;
-	        let mut y = 0;
+	        let mut x = lp;
+	        let mut y = tp;
 	        let ll2: &LinearLayout = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
 	        for ref mut child in self.children.as_mut_slice() {
+	            child.on_added_to_container(ll2, x, y);
 	            let (xx, yy) = child.size();
 	            match self.orientation {
 	                layout::Orientation::Horizontal => {
-	                    child.on_added_to_container(ll2, x, y);
 	                    x += xx as i32;
 	                }
 	                layout::Orientation::Vertical => {
-	                    child.on_added_to_container(ll2, x, y);
 	                    y += yy as i32;
 	                }
 	            }
-	            ll2.base.control.addSubview_(child.native_id() as cocoa_id);
+	            let () = msg_send![ll2.base.control, addSubview: child.native_id() as cocoa_id];
 	        }
         }
     }
@@ -218,14 +221,16 @@ impl UiMultiContainer for LinearLayout {
         let old = self.remove_child_from(index);
 
         if !self.base.control.is_null() {
-            let (x, y) = {
-                let mut x = 0;
-                let mut y = 0;
+            let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
+	        let (lm, tm, _, _) = self.base.control_base.layout.margin.into();
+	        let (x, y) = {
+                let mut x = lm + lp;
+                let mut y = tm + tp;
                 for ref child in self.children.as_slice() {
                     let (xx, yy) = child.size();
                     match self.orientation {
-                        layout::Orientation::Horizontal => x += xx,
-                        layout::Orientation::Vertical => y += yy,
+                        layout::Orientation::Horizontal => x += xx as i32,
+                        layout::Orientation::Vertical => y += yy as i32,
                     }
                 }
                 (x, y)
@@ -242,7 +247,7 @@ impl UiMultiContainer for LinearLayout {
                         new.on_added_to_container(self, x as i32, my_h as i32 - y as i32 - yy as i32); //TODO padding
                     }
                 }
-                self.base.control.addSubview_(new.native_id() as cocoa_id);
+                let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
             }
         }
         self.children.insert(index, new);
@@ -358,16 +363,18 @@ impl development::UiDrawable for LinearLayout {
     	}
     	if let Some((x, y)) = self.base.coords {
     		let (_, ph) = self.parent().unwrap().as_ref().size();
+	        let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
+	        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
 	        unsafe {
 	        	let mut frame: NSRect = msg_send![self.base.control, frame];
-	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
-	                                     self.base.measured_size.1 as f64);
-	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
-	            msg_send![self.base.control, setFrame: frame];
+	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
+	                                     (self.base.measured_size.1 as i32 - bm - tm) as f64);
+	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
+	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
 	        
-	        let mut x = 0;
-	        let mut y = 0;
+	        let mut x = lp;
+	        let mut y = tp;
 	        
 	        for mut child in self.children.as_mut_slice() {
 	            let child_size = child.size();
@@ -394,50 +401,74 @@ impl development::UiDrawable for LinearLayout {
     fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
     	
+    	let orientation = self.layout_orientation();
     	let old_size = self.base.measured_size;
-        self.base.measured_size = match self.visibility() {
+    	let (lp,tp,rp,bp) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,rm,bm) = self.base.control_base.layout.margin.into();
+    	let hp = lm + rm + lp + rp;
+    	let vp = tm + bm + tp + bp;
+    	self.base.measured_size = match self.visibility() {
         	types::Visibility::Gone => (0,0),
         	_ => {
-        		let mut w = parent_width;
-		        let mut h = parent_height;
-		
-		        if let layout::Size::Exact(ew) = self.layout_width() {
-		            w = ew;
-		        }
-		        if let layout::Size::Exact(eh) = self.layout_height() {
-		            w = eh;
-		        }
-		        let (mut ww, mut wm, mut hh, mut hm) = (0, 0, 0, 0);
-		        for ref mut child in self.children.as_mut_slice() {
-                    let (cw, ch, _) = child.measure(w, h);
-                    ww += cw;
-                    hh += ch;
-                    wm = max(wm, cw);
-                    hm = max(hm, ch);
-                }
-		        
-		        match self.orientation {
-		            layout::Orientation::Vertical => {
-		                if let layout::Size::WrapContent = self.layout_height() {
-		                    h = hh;
-		                } 
-		                if let layout::Size::WrapContent = self.layout_width() {
-		                    w = wm;
+        		let mut measured = false;
+        		let w = match self.layout_width() {
+        			layout::Size::Exact(w) => w,
+        			layout::Size::MatchParent => parent_width,
+        			layout::Size::WrapContent => {
+	        			let mut w = 0;
+		                for child in self.children.as_mut_slice() {
+		                    let (cw, _, _) = child.measure(
+		                    	max(0, parent_width as i32 - hp) as u16, 
+		                    	max(0, parent_height as i32 - vp) as u16
+		                    );
+		                    match orientation {
+		                    	layout::Orientation::Horizontal => {
+			                    	w += cw;
+			                    },
+		                    	layout::Orientation::Vertical => {
+			                    	w = max(w, cw);
+			                    },
+		                    }
 		                }
-		            }
-		            layout::Orientation::Horizontal => {
-		                if let layout::Size::WrapContent = self.layout_height() {
-		                    h = hm;
+	        			measured = true;
+	        			max(0, w as i32 + hp) as u16
+        			}
+        		};
+        		let h = match self.layout_height() {
+        			layout::Size::Exact(h) => h,
+        			layout::Size::MatchParent => parent_height,
+        			layout::Size::WrapContent => {
+	        			let mut h = 0;
+		                for child in self.children.as_mut_slice() {
+		                    let ch = if measured {
+		                    	child.size().1
+		                    } else {
+		                    	let (_, ch, _) = child.measure(
+			                    	max(0, parent_width as i32 - hp) as u16, 
+			                    	max(0, parent_height as i32 - vp) as u16
+			                    );
+		                    	ch
+		                    };
+		                    match orientation {
+		                    	layout::Orientation::Horizontal => {
+			                    	h = max(h, ch);
+			                    },
+		                    	layout::Orientation::Vertical => {
+			                    	h += ch;
+			                    },
+		                    }
 		                }
-		                if let layout::Size::WrapContent = self.layout_width() {
-		                    w = ww;
-		                }
-		            }
-		        }
-		        (w, h)
+	        			max(0, h as i32 + vp) as u16
+        			}
+        		};
+        		(w, h)
         	}
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+    	(
+            self.base.measured_size.0,
+            self.base.measured_size.1,
+            self.base.measured_size != old_size,
+        )
     }
 }
 

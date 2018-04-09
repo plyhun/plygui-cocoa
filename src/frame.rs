@@ -14,6 +14,7 @@ use objc::declare::ClassDecl;
 use std::mem;
 use std::os::raw::c_void;
 use std::borrow::Cow;
+use std::cmp::max;
 
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
@@ -23,6 +24,7 @@ lazy_static! {
 pub struct Frame {
     base: CocoaControlBase,
     label: String,
+    label_padding: i32,
     child: Option<Box<UiControl>>,
 }
 
@@ -39,6 +41,7 @@ impl Frame {
 	                             },
                              ),
                      label: label.into(),
+                     label_padding: 0,
                      child: None,
                  })
     }
@@ -131,24 +134,24 @@ impl UiControl for Frame {
     	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
-        let (lm, tm, _, _) = self.base.control_base.layout.margin.into();
+        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         let (w, h, _) = self.measure(pw, ph);
 
-        let rect = NSRect::new(NSPoint::new(x as f64, (ph as i32 - y - h as i32) as f64),
-                               NSSize::new(w as f64, h as f64));
+        let rect = NSRect::new(NSPoint::new((x + lm) as f64, (ph as i32 - y + bm - h as i32) as f64),
+                               NSSize::new((w as i32 - lm - rm) as f64, (h as i32 - tm - bm) as f64));
 
         unsafe {
         	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
 	        let base: cocoa_id = msg_send![base, initWithFrame: rect];
-			self.base.coords = Some((x as i32, y as i32));
-	        self.base.control = msg_send![base, autorelease];
+			self.base.control = msg_send![base, autorelease];
+	        self.base.coords = Some((x as i32, y as i32));
 	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
 	
 	        let frame2: &Frame = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
 	        if let Some(ref mut child) = self.child {
 	        	let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
-		        frame2.base.control.addSubview_(child.native_id() as cocoa_id);
-	        	child.on_added_to_container(frame2, lm + lp, tm + tp);
+		        child.on_added_to_container(frame2, lp, tp);
+		        let () = msg_send![frame2.base.control, addSubview:child.native_id() as cocoa_id];
 	        }
         }
     }
@@ -180,9 +183,9 @@ impl UiControl for Frame {
     
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-    	use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
+    	use plygui_api::markup::MEMBER_TYPE_FRAME;
     	
-    	fill_from_markup_base!(self, markup, registry, Frame, [MEMBER_ID_LAYOUT_LINEAR, MEMBER_TYPE_LINEAR_LAYOUT]);
+    	fill_from_markup_base!(self, markup, registry, Frame, [MEMBER_ID_FRAME, MEMBER_TYPE_FRAME]);
 		fill_from_markup_children!(self, markup, registry);		
     }
     fn as_has_layout(&self) -> &UiHasLayout {
@@ -228,6 +231,15 @@ impl UiContainer for Frame {
 	fn as_member_mut(&mut self) -> &mut UiMember {
 		self
 	}
+	fn draw_area_size(&self) -> (u16, u16) {
+        let mut size = self.size();
+        let (lp, tp, rp, bp) = self.layout_padding().into();
+        let (lm, tm, rm, bm) = self.layout_margin().into();
+        size.0 = max(0, size.0 as i32 - (lp + rp + lm + rm)) as u16;
+        size.1 = max(0, size.1 as i32 - (tp + bp + tm + bm + self.label_padding)) as u16;
+        
+        size
+    }
 }
 
 impl UiHasLabel for Frame {
@@ -239,8 +251,8 @@ impl UiHasLabel for Frame {
     	if self.base.control != 0 as cocoa_id {
     		unsafe {
     			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-    			msg_send![self.base.control, setTitle: title];
-    			msg_send![title, release];
+    			let () = msg_send![self.base.control, setTitle: title];
+    			let () = msg_send![title, release];
 	    	}
     	}
     }
@@ -297,17 +309,19 @@ impl development::UiDrawable for Frame {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (_, ph) = self.parent().unwrap().as_ref().size();
+    		let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
+	        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+	        let (_, ph) = self.parent().unwrap().as_ref().size();
 	        unsafe {
 	        	let mut frame: NSRect = msg_send![self.base.control, frame];
-	            frame.size = NSSize::new(self.base.measured_size.0 as f64,
-	                                     self.base.measured_size.1 as f64);
-	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
-	            msg_send![self.base.control, setFrame: frame];
+	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
+	                                     (self.base.measured_size.1 as i32 - tm - bm) as f64);
+	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - bm - self.base.measured_size.1 as i32) as f64);
+	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
 	        
 	        if let Some(ref mut child) = self.child {
-	            child.draw(Some((x, y)));  
+	            child.draw(Some((lp, tp)));  
 	        }    	
 	        if let Some(ref mut cb) = self.base.h_resize {
 	            unsafe {
@@ -341,7 +355,9 @@ impl development::UiDrawable for Frame {
 		                    	max(0, parent_width as i32 - hp) as u16, 
 		                    	max(0, parent_height as i32 - vp) as u16
 		                    );
-		                    w += cw as i32;
+		                    let mut label_size = unsafe { common::measure_string(self.label.as_ref()) };
+		                    self.label_padding = label_size.1 as i32;
+		                    w += max(cw, label_size.0) as i32;
 		                    measured = true;
 		                }
 	        			max(0, w as i32 + hp) as u16
@@ -360,15 +376,11 @@ impl development::UiDrawable for Frame {
 			                    	max(0, parent_width as i32 - hp) as u16, 
 			                    	max(0, parent_height as i32 - vp) as u16
 			                    );
-		                    	ch
+		                    	let mut label_size = unsafe { common::measure_string(self.label.as_ref()) };
+			                    self.label_padding = label_size.1 as i32;		                    
+		                        ch	                    	
 		                    };
-		                    h += ch as i32;
-		                    /*let mut label_size: windef::SIZE = unsafe { mem::zeroed() };
-			        		let label = label_size = common::measure_string(self.label.as_ref());
-                            label_size.0 += PADDING;
-                            label_size.1 += PADDING
-	                        self.label_padding = label_size.cy as i32;
-	                        h += self.label_padding;*/
+		                    h += ch as i32 + self.label_padding;
 		                }
 	        			max(0, h as i32 + vp) as u16
         			}

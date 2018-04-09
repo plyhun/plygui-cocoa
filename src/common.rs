@@ -56,21 +56,21 @@ impl CocoaControlBase {
 	}
     pub unsafe fn on_removed_from_container(&mut self) {
         self.control.removeFromSuperview();
-        msg_send![self.control, dealloc];
+        let () = msg_send![self.control, dealloc];
         self.control = ptr::null_mut();
     }   
     pub fn set_visibility(&mut self, visibility: types::Visibility) {
         if self.control_base.member_base.visibility != visibility {
             self.control_base.member_base.visibility = visibility;
             unsafe {
-                match self.control_base.member_base.visibility {
+                let () = match self.control_base.member_base.visibility {
                     types::Visibility::Visible => {
-                        msg_send![self.control, setHidden: NO];
+                        msg_send![self.control, setHidden: NO]
                     }
                     _ => {
-                        msg_send![self.control, setHidden: YES];
+                        msg_send![self.control, setHidden: YES]
                     }
-                }
+                };
             }
             self.invalidate();
         }
@@ -231,10 +231,10 @@ pub unsafe fn measure_string(text: &str) -> (u16, u16) {
     let text_container: cocoa_id = msg_send![class("NSTextContainer"), alloc];
     let text_container: cocoa_id = msg_send![text_container, init];
 
-    msg_send![layout_manager, addTextContainer: text_container];
-    msg_send![text_container, release];
-    msg_send![text_storage, addLayoutManager: layout_manager];
-    msg_send![layout_manager, release];
+    let () = msg_send![layout_manager, addTextContainer: text_container];
+    let () = msg_send![text_container, release];
+    let () = msg_send![text_storage, addLayoutManager: layout_manager];
+    let () = msg_send![layout_manager, release];
 
     let num = msg_send![layout_manager, numberOfGlyphs];
     let range = NSRange::new(0, num);
@@ -264,7 +264,7 @@ macro_rules! impl_invalidate {
 						common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap().invalidate();
 					} else if mparent.member_id() == MEMBER_ID_WINDOW {
 						this.draw(None);	
-						msg_send![parent_hwnd, setNeedsDisplay:YES];
+						let () = msg_send![parent_hwnd, setNeedsDisplay:YES];
 					} else {
 						panic!("Parent member {} is unsupported, neither a control, nor a window", mparent.member_id());
 					}
