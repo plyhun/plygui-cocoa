@@ -5,16 +5,16 @@ use plygui_api::{layout, ids, types, development, callbacks};
 use plygui_api::traits::{UiControl, UiHasLayout, UiHasLabel, UiSingleContainer, UiFrame, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_FRAME;
 
-use self::cocoa::appkit::NSView;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::id as cocoa_id;
 use objc::runtime::{Class, Object};
 use objc::declare::ClassDecl;
 
 use std::mem;
-use std::os::raw::c_void;
+use std::os::raw::{c_char, c_void};
 use std::borrow::Cow;
 use std::cmp::max;
+use std::ffi::CStr;
 
 lazy_static! {
 	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
@@ -23,15 +23,15 @@ lazy_static! {
 #[repr(C)]
 pub struct Frame {
     base: CocoaControlBase,
-    label: String,
     label_padding: i32,
     child: Option<Box<UiControl>>,
 }
 
 impl Frame {
     pub fn new(label: &str) -> Box<Frame> {
-        Box::new(Frame {
+        let mut frame = Box::new(Frame {
                      base: common::CocoaControlBase::with_params(
+                     	*WINDOW_CLASS,
 		                     	invalidate_impl,
                              	 development::UiMemberFunctions {
 		                             fn_member_id: member_id,
@@ -40,10 +40,13 @@ impl Frame {
 								     fn_size: size,
 	                             },
                              ),
-                     label: label.into(),
                      label_padding: 0,
                      child: None,
-                 })
+                 });
+        let selfptr = frame.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+        unsafe { (&mut *frame.base.control).set_ivar(IVAR, selfptr); }
+        frame.set_label(label);
+        frame
     }
 }
 impl UiMember for Frame {
@@ -134,25 +137,14 @@ impl UiControl for Frame {
     	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
-        let (w, h, _) = self.measure(pw, ph);
-
-        let rect = NSRect::new(NSPoint::new((x + lm) as f64, (ph as i32 - y + bm - h as i32) as f64),
-                               NSSize::new((w as i32 - lm - rm) as f64, (h as i32 - tm - bm) as f64));
-
-        unsafe {
-        	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
-	        let base: cocoa_id = msg_send![base, initWithFrame: rect];
-			self.base.control = msg_send![base, autorelease];
-	        self.base.coords = Some((x as i32, y as i32));
-	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
-	
-	        let frame2: &Frame = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
-	        if let Some(ref mut child) = self.child {
-	        	let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
-		        child.on_added_to_container(frame2, lp, tp);
-		        let () = msg_send![frame2.base.control, addSubview:child.native_id() as cocoa_id];
-	        }
+        self.measure(pw, ph);
+		self.draw(Some((x, y)));
+		
+		let frame2: &Frame = unsafe { mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void) };
+        if let Some(ref mut child) = self.child {
+        	unsafe { let () = msg_send![frame2.base.control, addSubview:child.native_id() as cocoa_id]; }
+	        let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
+        	child.on_added_to_container(frame2, lp, tp);
         }
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
@@ -244,24 +236,31 @@ impl UiContainer for Frame {
 
 impl UiHasLabel for Frame {
 	fn label<'a>(&'a self) -> Cow<'a,str> {
-        Cow::Borrowed(self.label.as_ref())
+		unsafe {
+			let label: cocoa_id = msg_send![self.base.control, getTitle];
+			let label: *const c_void = msg_send![label, UTF8String];
+	        CStr::from_ptr(label as *const c_char).to_string_lossy()
+		}
     }
     fn set_label(&mut self, label: &str) {
-    	self.label = label.into();
-    	if self.base.control != 0 as cocoa_id {
-    		unsafe {
-    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-    			let () = msg_send![self.base.control, setTitle: title];
-    			let () = msg_send![title, release];
-	    	}
-    	}
+	    unsafe {
+			let title = NSString::alloc(cocoa::base::nil).init_str(label);
+    		let () = msg_send![self.base.control, setTitle:title];
+            let () = msg_send![title, release];
+		}
     }
 }
 
 impl UiSingleContainer for Frame {
 	fn set_child(&mut self, child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
-        let old = self.child.take();
+        let mut old = self.child.take();
         self.child = child;
+        if let Some(ref mut child) = self.child {
+        	unsafe { let () = msg_send![self.base.control, addSubview:child.native_id() as cocoa_id]; }
+        } 
+		if let Some(ref mut old) = old {
+	        unsafe { let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview]; }
+        }
         old
     }
     fn child(&self) -> Option<&UiControl> {
@@ -355,7 +354,7 @@ impl development::UiDrawable for Frame {
 		                    	max(0, parent_width as i32 - hp) as u16, 
 		                    	max(0, parent_height as i32 - vp) as u16
 		                    );
-		                    let mut label_size = unsafe { common::measure_string(self.label.as_ref()) };
+		                    let mut label_size = unsafe { common::measure_nsstring(msg_send![self.base.control, title]) };
 		                    self.label_padding = label_size.1 as i32;
 		                    w += max(cw, label_size.0) as i32;
 		                    measured = true;
@@ -376,7 +375,7 @@ impl development::UiDrawable for Frame {
 			                    	max(0, parent_width as i32 - hp) as u16, 
 			                    	max(0, parent_height as i32 - vp) as u16
 			                    );
-		                    	let mut label_size = unsafe { common::measure_string(self.label.as_ref()) };
+		                    	let mut label_size = unsafe { common::measure_nsstring(msg_send![self.base.control, title]) };
 			                    self.label_padding = label_size.1 as i32;		                    
 		                        ch	                    	
 		                    };

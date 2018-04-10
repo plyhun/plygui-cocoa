@@ -5,12 +5,13 @@ use std::os::raw::c_void;
 use std::slice;
 
 use self::cocoa::base::{class, id as cocoa_id};
-use self::cocoa::foundation::{NSString, NSRect, NSRange};
+use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint, NSRange};
 use self::cocoa::appkit::NSView;
-use objc::runtime::{Class, Object, Ivar, YES, NO, class_copyIvarList};
+use objc::runtime::{Class, Ivar, YES, NO, class_copyIvarList};
 
 use plygui_api::{development, ids, layout, types, callbacks};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RefClass(pub *const Class);
 unsafe impl Sync for RefClass {}
 
@@ -29,7 +30,7 @@ pub struct CocoaControlBase {
 }
 
 impl CocoaControlBase {
-	pub fn with_params(invalidate: unsafe fn(this: &mut CocoaControlBase), functions: development::UiMemberFunctions) -> CocoaControlBase {
+	pub fn with_params(class: RefClass, invalidate: unsafe fn(this: &mut CocoaControlBase), functions: development::UiMemberFunctions) -> CocoaControlBase {
 		CocoaControlBase {
         	control_base: development::UiControlCommon {
 	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
@@ -40,7 +41,14 @@ impl CocoaControlBase {
 					..Default::default()
 	            },
         	},
-        	control: ptr::null_mut(),
+        	control: unsafe {
+        		let rect = NSRect::new(NSPoint::new(0f64, 0f64), NSSize::new(0f64, 0f64));
+
+		        let mut control: cocoa_id = msg_send![class.0, alloc];
+		        control = msg_send![control, initWithFrame: rect];
+				control = msg_send![control, autorelease];
+	        	control
+	        },
             h_resize: None,
             coords: None,
             measured_size: (0, 0),
@@ -88,68 +96,26 @@ impl CocoaControlBase {
     }
     pub fn parent(&self) -> Option<&types::UiMemberBase> {
         unsafe {
-            parent_cocoa_id(self.control, false).map(|id| cast_cocoa_id(id).unwrap())
+            parent_cocoa_id(self.control, false).and_then(|id| cast_cocoa_id(id))
         }
     }
     pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
-            parent_cocoa_id(self.control, false).map(|id| cast_cocoa_id_mut(id).unwrap())
+            parent_cocoa_id(self.control, false).and_then(|id| cast_cocoa_id_mut(id))
         }
     }
     pub fn root(&self) -> Option<&types::UiMemberBase> {
         unsafe {
-            parent_cocoa_id(self.control, true).map(|id| cast_cocoa_id(id).unwrap())
+            parent_cocoa_id(self.control, true).and_then(|id| cast_cocoa_id(id))
         }
     }
     pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         unsafe {
-            parent_cocoa_id(self.control, true).map(|id| cast_cocoa_id_mut(id).unwrap())
+            parent_cocoa_id(self.control, true).and_then(|id| cast_cocoa_id_mut(id))
         }
     }
 }
 
-/*pub unsafe fn cast_uicontrol_to_cocoa_mut(input: &mut Box<UiControl>) -> &mut CocoaControl {
-    use std::ops::DerefMut;
-    match input.role_mut() {
-        UiRoleMut::Button(_) => {
-            let a: &mut Box<button::Button> = mem::transmute(input);
-            a.deref_mut()
-        }
-        UiRoleMut::LinearLayout(_) => {
-            let a: &mut Box<layout_linear::LinearLayout> = mem::transmute(input);
-            a.deref_mut()
-        }
-        UiRoleMut::Window(_) => {
-            panic!("Window as a container child is impossible!");
-        }
-        _ => {
-            unimplemented!();
-        }
-    }
-}
-
-pub unsafe fn cast_cocoa_id_to_cocoa<'a>(id: cocoa_id) -> Option<&'a mut CocoaControl> {
-	if id.is_null() {
-        return None;
-    }
-    let dlg = id.delegate();
-    let mut ivar_count = 0;
-    let ivars = class_copyIvarList(msg_send![dlg, class], &mut ivar_count);
-    let ivar: &Ivar = mem::transmute(*ivars);
-    let id_: &Object = mem::transmute(dlg);
-    let saved: *mut c_void = *id_.get_ivar(ivar.name());
-    match ivar.name() {
-        super::layout_linear::IVAR => {
-            let ll: &mut LinearLayout = mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void);
-            Some(ll)
-        }
-        super::button::IVAR => {
-            let w: &mut Button = mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void);
-            Some(w)
-        }
-        _ => None,
-    }
-}*/
 pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
 	let id_: cocoa_id = if is_root { msg_send![id, window] } else { msg_send![id, superview] };
     if id_.is_null() || id_ == id {
@@ -172,10 +138,14 @@ pub unsafe fn cast_cocoa_id_to_ptr<'a>(id: cocoa_id) -> Option<*mut c_void> {
     let class = msg_send![id, class];
     let ivars = class_copyIvarList(class, &mut ivar_count);
     let ivars: &[&Ivar] = slice::from_raw_parts_mut(ivars as *mut _, ivar_count as usize);
-    let id_: &Object = mem::transmute(
-    	if ivars.iter().any(|ivar| ivar.name() == IVAR) { id } else { parent_cocoa_id(id, true).unwrap() }
+    let id_: Option<cocoa_id> = mem::transmute(
+    	if ivars.iter().any(|ivar| ivar.name() == IVAR) { 
+    		Some(id) 
+    	} else { 
+    		parent_cocoa_id(id, true) 
+	    }
     );
-    Some(*id_.get_ivar(IVAR))
+    id_.map(|id_|*(*id_).get_ivar(IVAR))
 }
 
 /*pub unsafe fn cast_cocoa_id_to_uicontainer<'a>(id: cocoa_id) -> Option<&'a mut UiContainer> {
@@ -222,8 +192,11 @@ pub unsafe fn cast_cocoa_id_to_ptr<'a>(id: cocoa_id) -> Option<*mut c_void> {
 }*/
 
 pub unsafe fn measure_string(text: &str) -> (u16, u16) {
-    let title = NSString::alloc(cocoa::base::nil).init_str(text);
+	let title = NSString::alloc(cocoa::base::nil).init_str(text);
+    measure_nsstring(title)
+}
 
+pub unsafe fn measure_nsstring(title: cocoa_id) -> (u16, u16) {
     let text_storage: cocoa_id = msg_send![class("NSTextStorage"), alloc];
     let text_storage: cocoa_id = msg_send![text_storage, initWithString: title];
     let layout_manager: cocoa_id = msg_send![class("NSLayoutManager"), alloc];

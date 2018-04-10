@@ -27,8 +27,9 @@ pub struct LinearLayout {
 
 impl LinearLayout {
     pub fn new(orientation: layout::Orientation) -> Box<LinearLayout> {
-        let mut ll = Box::new(LinearLayout {
+    	let mut ll = Box::new(LinearLayout {
                      base: common::CocoaControlBase::with_params(
+                     	*WINDOW_CLASS,
 			                     invalidate_impl,
                              	 development::UiMemberFunctions {
 		                             fn_member_id: member_id,
@@ -40,7 +41,9 @@ impl LinearLayout {
                      orientation: orientation,
                      children: Vec::new(),
                  });
-        ll.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+        let selfptr = ll.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+        unsafe { (&mut *ll.base.control).set_ivar(IVAR, selfptr); }
+		ll.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         ll
     }
 }
@@ -132,36 +135,55 @@ impl UiControl for LinearLayout {
     	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
-        let (w, h, _) = self.measure(pw, ph);
+        /*let (w, h, _) = self.measure(pw, ph);
 		let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
         let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         
-        let rect = NSRect::new(NSPoint::new((x + lm) as f64, (ph as i32 - y - tm - h as i32) as f64),
-                               NSSize::new((w as i32 - rm - lm) as f64, (h as i32 - tm - bm) as f64));
+        self.base.coords = Some((x as i32, y as i32));
+	    
+	    unsafe {
+        	let mut frame: NSRect = msg_send![self.base.control, frame];
+            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
+                                     (self.base.measured_size.1 as i32 - bm - tm) as f64);
+            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
+            let () = msg_send![self.base.control, setFrame: frame];
+        }
 
-        unsafe {
-        	let base: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
-	        let base: cocoa_id = msg_send![base, initWithFrame: rect];
-			self.base.coords = Some((x as i32, y as i32));
-	        self.base.control = msg_send![base, autorelease];
-	        (&mut *self.base.control).set_ivar(IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
-	
-	        let mut x = lp;
-	        let mut y = tp;
-	        let ll2: &LinearLayout = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
-	        for ref mut child in self.children.as_mut_slice() {
-	            child.on_added_to_container(ll2, x, y);
-	            let (xx, yy) = child.size();
-	            match self.orientation {
-	                layout::Orientation::Horizontal => {
-	                    x += xx as i32;
-	                }
-	                layout::Orientation::Vertical => {
-	                    y += yy as i32;
-	                }
-	            }
-	            let () = msg_send![ll2.base.control, addSubview: child.native_id() as cocoa_id];
-	        }
+        let mut x = lp;
+        let mut y = tp;
+        let ll2: &LinearLayout = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
+        for ref mut child in self.children.as_mut_slice() {
+            child.on_added_to_container(ll2, x, y);
+            let (xx, yy) = child.size();
+            match self.orientation {
+                layout::Orientation::Horizontal => {
+                    x += xx as i32;
+                }
+                layout::Orientation::Vertical => {
+                    y += yy as i32;
+                }
+            }
+            unsafe { let () = msg_send![ll2.base.control, addSubview: child.native_id() as cocoa_id]; }
+        }*/
+		self.measure(pw, ph);
+        //self.base.dirty = false;
+        self.draw(Some((x, y)));
+        
+        let selfptr = self as *mut _ as *mut c_void;
+        let orientation = self.layout_orientation();
+        let (lp,tp,_,_) = self.base.control_base.layout.padding.into();
+    	let (lm,tm,_,_) = self.base.control_base.layout.margin.into();
+        let mut x = x + lp + lm;
+        let mut y = y + tp + tm;
+        for ref mut child in self.children.as_mut_slice() {
+            let self2: &mut LinearLayout = unsafe { mem::transmute(selfptr) };
+            unsafe { let () = msg_send![self2.base.control, addSubview: child.native_id() as cocoa_id]; }
+            child.on_added_to_container(self2, x, y);
+            let (xx, yy) = child.size();
+            match orientation {
+                layout::Orientation::Horizontal => x += xx as i32,
+                layout::Orientation::Vertical => y += yy as i32,
+            }
         }
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
@@ -217,38 +239,14 @@ impl UiMultiContainer for LinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, index: usize, mut new: Box<UiControl>) -> Option<Box<UiControl>> {
-        let old = self.remove_child_from(index);
+    fn set_child_to(&mut self, index: usize, new: Box<UiControl>) -> Option<Box<UiControl>> {
+        let mut old = self.remove_child_from(index);
 
-        if !self.base.control.is_null() {
-            let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
-	        let (lm, tm, _, _) = self.base.control_base.layout.margin.into();
-	        let (x, y) = {
-                let mut x = lm + lp;
-                let mut y = tm + tp;
-                for ref child in self.children.as_slice() {
-                    let (xx, yy) = child.size();
-                    match self.orientation {
-                        layout::Orientation::Horizontal => x += xx as i32,
-                        layout::Orientation::Vertical => y += yy as i32,
-                    }
-                }
-                (x, y)
-            };
-            unsafe {
-                //let mut wc = common::cast_uicontrol_to_cocoa_mut(&mut new);
-                let (_,yy) = new.size();
-                match self.orientation {
-                    layout::Orientation::Horizontal => {
-                        new.on_added_to_container(self, x as i32, y as i32); //TODO padding
-                    }
-                    layout::Orientation::Vertical => {
-                        let my_h = self.size().1;
-                        new.on_added_to_container(self, x as i32, my_h as i32 - y as i32 - yy as i32); //TODO padding
-                    }
-                }
-                let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
-            }
+        unsafe {
+	        if let Some(ref mut old) = old {
+		        let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview];
+	        }
+            let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
         self.children.insert(index, new);
 

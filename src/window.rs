@@ -1,7 +1,7 @@
 use super::*;
 use super::common::*;
 
-use self::cocoa::appkit::{NSWindow, NSRunningApplication, NSWindowStyleMask, NSBackingStoreBuffered};
+use self::cocoa::appkit::{NSWindow, NSWindowStyleMask, NSBackingStoreBuffered};
 use self::cocoa::foundation::{NSString, NSAutoreleasePool, NSRect, NSSize, NSPoint};
 use self::cocoa::base::{id, nil};
 use objc::runtime::{Class, Object, Sel, BOOL, YES, NO};
@@ -124,22 +124,18 @@ impl UiWindow for Window {
 
 impl UiSingleContainer for Window {
 	fn set_child(&mut self, mut child: Option<Box<UiControl>>) -> Option<Box<UiControl>> {
-        use self::cocoa::appkit::NSView;
-
-        unsafe {
-            let mut old = self.child.take();
-            if let Some(old) = old.as_mut() {
-                old.on_removed_from_container(self);
-            }
-            if let Some(new) = child.as_mut() {
-            	let (_, _) = self.size();
-                new.on_added_to_container(self, 0, 0); //TODO padding
-                let () = msg_send![self.container, addSubview: new.native_id() as id];
-            }
-            self.child = child;
-
-            old
+        let mut old = self.child.take();
+        if let Some(old) = old.as_mut() {
+            old.on_removed_from_container(self);
         }
+        if let Some(new) = child.as_mut() {
+        	let (_, _) = self.size();
+           unsafe { let () = msg_send![self.container, addSubview: new.native_id() as id]; }
+            new.on_added_to_container(self, 0, 0);            
+        }
+        self.child = child;
+
+        old
     }
     fn child(&self) -> Option<&UiControl> {
         self.child.as_ref().map(|c| c.as_ref())

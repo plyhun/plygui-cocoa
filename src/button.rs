@@ -4,15 +4,16 @@ use plygui_api::{layout, types, development, callbacks};
 use plygui_api::traits::{UiControl, UiHasLayout, UiClickable, UiHasLabel, UiButton, UiMember, UiContainer};
 use plygui_api::members::MEMBER_ID_BUTTON;
 
-use self::cocoa::appkit::{NSBezelStyle, NSButton};
+use self::cocoa::appkit::NSBezelStyle;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::id;
 use objc::runtime::{Class, Object, Sel};
 use objc::declare::ClassDecl;
 
 use std::mem;
-use std::os::raw::c_void;
+use std::os::raw::{c_char, c_void};
 use std::borrow::Cow;
+use std::ffi::CStr;
 
 lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
@@ -25,15 +26,15 @@ const BASE_CLASS: &str = "NSButton";
 pub struct Button {
     base: common::CocoaControlBase,
 
-    label: String,
     h_left_clicked: Option<callbacks::Click>,
     h_right_clicked: Option<callbacks::Click>,
 }
 
 impl Button {
     pub fn new(label: &str) -> Box<Button> {
-        let mut b = Box::new(Button {
+    	let mut b = Box::new(Button {
                      base: common::CocoaControlBase::with_params(
+                     	*WINDOW_CLASS,
 		                     	invalidate_impl,
                              	development::UiMemberFunctions {
 		                             fn_member_id: member_id,
@@ -42,28 +43,34 @@ impl Button {
 								     fn_size: size,
 	                             },
                              ),
-                     label: label.to_owned(),
                      h_left_clicked: None,
                      h_right_clicked: None,
                  });
+        let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+        unsafe {
+        	(&mut *b.base.control).set_ivar(common::IVAR, selfptr);
+		    let () = msg_send![b.base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle]; 
+        }       	    
         b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
+        b.set_label(label);
         b
     }
 }
 
 impl UiHasLabel for Button {
 	fn label<'a>(&'a self) -> Cow<'a,str> {
-        Cow::Borrowed(self.label.as_ref())
+		unsafe {
+			let label: id = msg_send![self.base.control, title];
+			let label: *const c_void = msg_send![label, UTF8String];
+	        CStr::from_ptr(label as *const c_char).to_string_lossy()
+		}
     }
     fn set_label(&mut self, label: &str) {
-	    	self.label = label.into();
-	    	if self.base.control != 0 as id {
-	    		unsafe {
-	    			let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-		    		let () = msg_send![self.base.control, setTitle:title];
-                                let () = msg_send![title, release];
-	    		}
-	    	}
+	    unsafe {
+			let title = NSString::alloc(cocoa::base::nil).init_str(label);
+    		let () = msg_send![self.base.control, setTitle:title];
+            let () = msg_send![title, release];
+		}
     }
 }
 impl UiClickable for Button {
@@ -172,26 +179,17 @@ impl UiControl for Button {
 	    use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
-        let (w, h, _) = self.measure(pw, ph);
-		let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        self.measure(pw, ph);
+		/*let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
         
-        let rect = NSRect::new(NSPoint::new((x as i32 + lm) as f64, (ph as i32 - y - h as i32 - tm) as f64),
-                               NSSize::new((w as i32 - lm - rm) as f64, (h as i32 - tm - bm) as f64));
-
-        unsafe {
-	        let base: id = msg_send![WINDOW_CLASS.0, alloc];
-	        let base: id = msg_send![base, initWithFrame: rect];
-	
-	        self.base.coords = Some((x as i32, (ph as i32 - y - h as i32) as i32));
-	        self.base.control = msg_send![base, autorelease];
-
-        	let title = NSString::alloc(cocoa::base::nil).init_str(self.label.as_ref());
-	        let () = msg_send![self.base.control, setTitle:title];
-	        let () = msg_send![self.base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle];
-	
-	        (&mut *self.base.control).set_ivar(common::IVAR, self as *mut _ as *mut ::std::os::raw::c_void);
-	        let () = msg_send![title, release];
-        }
+        self.base.coords = Some((x as i32, y as i32));	        
+        
+        let mut frame: NSRect = self.base.frame();
+        frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
+                                 (self.base.measured_size.1 as i32 - tm - bm) as f64);
+        frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
+        let () = msg_send![self.base.control, setFrame: frame];*/
+		self.draw(Some((x, y)));
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         unsafe { self.base.on_removed_from_container(); }
@@ -289,7 +287,7 @@ impl development::UiDrawable for Button {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
-                        label_size = common::measure_string(self.label.as_ref());
+                        label_size = common::measure_nsstring(msg_send![self.base.control, title]);
                         label_size.0 as i32 + lm + rm + lp + rp
                     } 
                 };
@@ -298,7 +296,7 @@ impl development::UiDrawable for Button {
                     layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
                         if label_size.1 < 1 {
-                            label_size = common::measure_string(self.label.as_ref());
+                            label_size = common::measure_nsstring(msg_send![self.base.control, title]);
                         }
                         label_size.1 as i32 + tm + bm + tp + bp
                     } 
