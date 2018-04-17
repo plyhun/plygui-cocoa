@@ -8,7 +8,6 @@ use plygui_api::members::MEMBER_ID_FRAME;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::id as cocoa_id;
 use objc::runtime::{Class, Object};
-use objc::declare::ClassDecl;
 
 use std::mem;
 use std::os::raw::{c_char, c_void};
@@ -17,7 +16,7 @@ use std::cmp::max;
 use std::ffi::CStr;
 
 lazy_static! {
-	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
+	static ref WINDOW_CLASS: RefClass = unsafe { common::register_window_class(MEMBER_ID_FRAME, "NSBox", |_|{}) };
 }
 
 #[repr(C)]
@@ -29,6 +28,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(label: &str) -> Box<Frame> {
+		unsafe {println!("frame is {}", (&*WINDOW_CLASS.0).name());}
         let mut frame = Box::new(Frame {
                      base: common::CocoaControlBase::with_params(
                      	*WINDOW_CLASS,
@@ -138,13 +138,16 @@ impl UiControl for Frame {
     	
         let (pw, ph) = parent.draw_area_size();
         self.measure(pw, ph);
-		self.draw(Some((x, y)));
 		
-		let frame2: &Frame = unsafe { mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void) };
-        if let Some(ref mut child) = self.child {
-        	unsafe { let () = msg_send![frame2.base.control, addSubview:child.native_id() as cocoa_id]; }
+		let selfptr = self as *mut _ as *mut ::std::os::raw::c_void;
+		if let Some(ref mut child) = self.child {
+        	let frame2: &Frame = unsafe { mem::transmute(selfptr) };
+	        let clas: *mut Class = unsafe {msg_send![frame2.base.control, class]};
+		    unsafe {println!("frame 2 is {}", (&*clas).name());}
+	        unsafe { let () = msg_send![frame2.base.control, addSubview:child.native_id() as cocoa_id]; }
+	        let (lm, tm, _, _) = self.base.control_base.layout.margin.into();
 	        let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
-        	child.on_added_to_container(frame2, lp, tp);
+        	child.on_added_to_container(frame2, x + lp + lm, y + tp + tm);
         }
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
@@ -256,7 +259,11 @@ impl UiSingleContainer for Frame {
         let mut old = self.child.take();
         self.child = child;
         if let Some(ref mut child) = self.child {
-        	unsafe { let () = msg_send![self.base.control, addSubview:child.native_id() as cocoa_id]; }
+        	unsafe { 
+        		let child_id = child.native_id() as cocoa_id;
+	        	(&mut *child_id).set_ivar(IVAR_PARENT, self.base.control as *mut c_void);
+	        	let () = msg_send![self.base.control, addSubview:child_id]; 
+        	}
         } 
 		if let Some(ref mut old) = old {
 	        unsafe { let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview]; }
@@ -400,14 +407,6 @@ pub(crate) fn spawn() -> Box<UiControl> {
 	Frame::new("")
 }
 
-unsafe fn register_window_class() -> RefClass {
-    let superclass = Class::get("NSBox").unwrap();
-    let mut decl = ClassDecl::new(MEMBER_ID_FRAME, superclass).unwrap();
-
-    decl.add_ivar::<*mut c_void>(IVAR);
-
-    RefClass(decl.register())
-}
 impl_invalidate!(Frame);
 impl_is_control!(Frame);
 impl_size!(Frame);

@@ -8,6 +8,7 @@ use self::cocoa::base::{class, id as cocoa_id};
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint, NSRange};
 use self::cocoa::appkit::NSView;
 use objc::runtime::{Class, Ivar, YES, NO, class_copyIvarList};
+use objc::declare::ClassDecl;
 
 use plygui_api::{development, ids, layout, types, callbacks};
 
@@ -16,6 +17,7 @@ pub struct RefClass(pub *const Class);
 unsafe impl Sync for RefClass {}
 
 pub const IVAR: &str = "plyguiIvar";
+pub const IVAR_PARENT: &str = "plyguiIvarParent";
 
 #[repr(C)]
 pub struct CocoaControlBase {
@@ -117,11 +119,20 @@ impl CocoaControlBase {
 }
 
 pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
-	let id_: cocoa_id = if is_root { msg_send![id, window] } else { msg_send![id, superview] };
+	let id_: cocoa_id = if is_root { 
+        msg_send![id, window] 
+    } else if let Some(parent) = has_cocoa_id_ivar(id, IVAR_PARENT) { 
+        parent as cocoa_id
+    } else {
+    	msg_send![id, superview] 
+    };
     if id_.is_null() || id_ == id {
         None
     } else {
-    	Some(id_)
+    	let clas: *mut Class = msg_send![id, class];
+	    let classp: *mut Class = msg_send![id_, class];
+	    println!("parent of {} is {}", (&*clas).name(), (&*classp).name());
+	    Some(id_)
     }
 }
 pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: Sized {
@@ -134,62 +145,31 @@ pub unsafe fn cast_cocoa_id_to_ptr<'a>(id: cocoa_id) -> Option<*mut c_void> {
 	if id.is_null() {
         return None;
     }    
+	
+    if let Some(parent) = has_cocoa_id_ivar(id, IVAR) {
+	    Some(parent)
+    } else { 
+		parent_cocoa_id(id, true).and_then(|id| cast_cocoa_id_to_ptr(id))
+    }
+}
+
+pub unsafe fn has_cocoa_id_ivar(id: cocoa_id, ivar: &str) -> Option<*mut c_void> {
+	if id.is_null() {
+        return None;
+    }    
     let mut ivar_count = 0;
     let class = msg_send![id, class];
     let ivars = class_copyIvarList(class, &mut ivar_count);
     let ivars: &[&Ivar] = slice::from_raw_parts_mut(ivars as *mut _, ivar_count as usize);
-    let id_: Option<cocoa_id> = mem::transmute(
-    	if ivars.iter().any(|ivar| ivar.name() == IVAR) { 
-    		Some(id) 
-    	} else { 
-    		parent_cocoa_id(id, true) 
-	    }
-    );
-    id_.map(|id_|*(*id_).get_ivar(IVAR))
+    
+    if ivars.iter().any(|va| va.name() == ivar) {
+    	let ivar: *mut c_void = *(&mut *id).get_ivar(ivar);
+		if !ivar.is_null() { 
+			return Some(ivar) 
+		}
+    } 
+    None
 }
-
-/*pub unsafe fn cast_cocoa_id_to_uicontainer<'a>(id: cocoa_id) -> Option<&'a mut UiContainer> {
-	if id.is_null() {
-        return None;
-    }
-    let dlg = id.delegate();
-    let mut ivar_count = 0;
-    let ivars = class_copyIvarList(msg_send![dlg, class], &mut ivar_count);
-    let ivar: &Ivar = mem::transmute(*ivars);
-    let id_: &Object = mem::transmute(dlg);
-    let saved: *mut c_void = *id_.get_ivar(ivar.name());
-    match ivar.name() {
-        super::layout_linear::IVAR => {
-            let ll: &mut LinearLayout = mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void);
-            Some(ll)
-        },
-        super::window::IVAR => {
-            let w: &mut Window = mem::transmute(saved as *mut _ as *mut ::std::os::raw::c_void);
-            Some(w)
-        }
-        _ => None,
-    }
-}*/
-
-/*pub unsafe fn cast_uicontrol_to_cocoa(input: &Box<UiControl>) -> &CocoaControl {
-    use std::ops::Deref;
-    match input.role() {
-        UiRole::Button(_) => {
-            let a: &Box<button::Button> = mem::transmute(input);
-            a.deref()
-        }
-        UiRole::LinearLayout(_) => {
-            let a: &Box<layout_linear::LinearLayout> = mem::transmute(input);
-            a.deref()
-        }
-        UiRole::Window(_) => {
-            panic!("Window as a container child is impossible!");
-        }
-        _ =>{
-	        unimplemented!();
-        }
-    }
-}*/
 
 pub unsafe fn measure_string(text: &str) -> (u16, u16) {
 	let title = NSString::alloc(cocoa::base::nil).init_str(text);
@@ -214,6 +194,18 @@ pub unsafe fn measure_nsstring(title: cocoa_id) -> (u16, u16) {
 
     let string_rect: NSRect = msg_send![layout_manager, boundingRectForGlyphRange:range inTextContainer:text_container];
     (string_rect.size.width as u16, string_rect.size.height as u16)
+}
+
+pub unsafe fn register_window_class<F>(name: &str, base: &str, mut f: F) -> RefClass where F: FnMut(&mut ClassDecl) {
+    let superclass = Class::get(base).unwrap();
+    let mut decl = ClassDecl::new(name, superclass).unwrap();
+
+    decl.add_ivar::<*mut c_void>(IVAR);
+    decl.add_ivar::<*mut c_void>(IVAR_PARENT);
+    
+    f(&mut decl);
+
+    common::RefClass(decl.register())
 }
 
 #[macro_export]
@@ -245,49 +237,6 @@ macro_rules! impl_invalidate {
 					this.draw(None);	
 				}
 		    }
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_is_control {
-	($typ: ty) => {
-		unsafe fn is_control(this: &::plygui_api::development::UiMemberCommon) -> Option<&::plygui_api::development::UiControlCommon> {
-			Some(&::plygui_api::utils::base_to_impl::<$typ>(this).base.control_base)
-		}
-		unsafe fn is_control_mut(this: &mut ::plygui_api::development::UiMemberCommon) -> Option<&mut ::plygui_api::development::UiControlCommon> {
-			Some(&mut ::plygui_api::utils::base_to_impl_mut::<$typ>(this).base.control_base)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_size {
-	($typ: ty) => {
-		unsafe fn size(this: &::plygui_api::development::UiMemberCommon) -> (u16, u16) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).size()
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_member_id {
-	($mem: expr) => {
-		unsafe fn member_id(_: &::plygui_api::development::UiMemberCommon) -> &'static str {
-			$mem
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_measure {
-	($typ: ty) => {
-		unsafe fn measure(&mut UiMemberBase, w: u16, h: u16) -> (u16, u16, bool) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).measure(w, h)
-		}
-	}
-}
-#[macro_export]
-macro_rules! impl_draw {
-	($typ: ty) => {
-		unsafe fn draw(&mut UiMemberBase, coords: Option<(i32, i32)>) {
-			::plygui_api::utils::base_to_impl::<$typ>(this).draw(coords)
 		}
 	}
 }

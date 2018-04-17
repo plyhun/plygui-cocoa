@@ -14,7 +14,7 @@ use plygui_api::types::{WindowMenu, WindowStartSize};
 use plygui_api::ids::Id;
 
 lazy_static! {
-	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
+	static ref WINDOW_CLASS: RefClass = unsafe { common::register_window_class(MEMBER_ID_APPLICATION, "NSApplication", |_| {}) };
 	static ref DELEGATE: RefClass = unsafe { register_delegate() };
 }
 
@@ -102,15 +102,6 @@ unsafe fn register_delegate() -> RefClass {
     decl.add_method(sel!(applicationShouldTerminateAfterLastWindowClosed:),
                     application_should_terminate_after_last_window_closed as extern "C" fn(&Object, Sel, id) -> BOOL);
     decl.add_ivar::<*mut c_void>(IVAR);
-
-    RefClass(decl.register())
-}
-
-unsafe fn register_window_class() -> RefClass {
-    let superclass = Class::get("NSApplication").unwrap();
-    let mut decl = ClassDecl::new(MEMBER_ID_APPLICATION, superclass).unwrap();
-
-    decl.add_ivar::<*mut c_void>(common::IVAR);
 
     RefClass(decl.register())
 }

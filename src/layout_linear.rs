@@ -7,14 +7,13 @@ use plygui_api::members::MEMBER_ID_LAYOUT_LINEAR;
 
 use self::cocoa::foundation::{NSRect, NSSize, NSPoint};
 use self::cocoa::base::id as cocoa_id;
-use objc::runtime::{Class, Object};
-use objc::declare::ClassDecl;
+use objc::runtime::Object;
 
 use std::mem;
 use std::os::raw::c_void;
 
 lazy_static! {
-	static ref WINDOW_CLASS: RefClass = unsafe { register_window_class() };
+	static ref WINDOW_CLASS: RefClass = unsafe { common::register_window_class(MEMBER_ID_LAYOUT_LINEAR, "NSView", |_|{}) };
 }
 const DEFAULT_PADDING: i32 = 6;
 
@@ -135,40 +134,8 @@ impl UiControl for LinearLayout {
     	use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
-        /*let (w, h, _) = self.measure(pw, ph);
-		let (lp, tp, _, _) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
-        
-        self.base.coords = Some((x as i32, y as i32));
-	    
-	    unsafe {
-        	let mut frame: NSRect = msg_send![self.base.control, frame];
-            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
-                                     (self.base.measured_size.1 as i32 - bm - tm) as f64);
-            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
-            let () = msg_send![self.base.control, setFrame: frame];
-        }
-
-        let mut x = lp;
-        let mut y = tp;
-        let ll2: &LinearLayout = mem::transmute(self as *mut _ as *mut ::std::os::raw::c_void);
-        for ref mut child in self.children.as_mut_slice() {
-            child.on_added_to_container(ll2, x, y);
-            let (xx, yy) = child.size();
-            match self.orientation {
-                layout::Orientation::Horizontal => {
-                    x += xx as i32;
-                }
-                layout::Orientation::Vertical => {
-                    y += yy as i32;
-                }
-            }
-            unsafe { let () = msg_send![ll2.base.control, addSubview: child.native_id() as cocoa_id]; }
-        }*/
-		self.measure(pw, ph);
+        self.measure(pw, ph);
         //self.base.dirty = false;
-        self.draw(Some((x, y)));
-        
         let selfptr = self as *mut _ as *mut c_void;
         let orientation = self.layout_orientation();
         let (lp,tp,_,_) = self.base.control_base.layout.padding.into();
@@ -475,14 +442,6 @@ pub(crate) fn spawn() -> Box<UiControl> {
 	LinearLayout::new(layout::Orientation::Vertical)
 }
 
-unsafe fn register_window_class() -> RefClass {
-    let superclass = Class::get("NSView").unwrap();
-    let mut decl = ClassDecl::new(MEMBER_ID_LAYOUT_LINEAR, superclass).unwrap();
-
-    decl.add_ivar::<*mut c_void>(IVAR);
-
-    RefClass(decl.register())
-}
 impl_invalidate!(LinearLayout);
 impl_is_control!(LinearLayout);
 impl_size!(LinearLayout);

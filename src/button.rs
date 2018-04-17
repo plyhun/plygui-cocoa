@@ -8,7 +8,6 @@ use self::cocoa::appkit::NSBezelStyle;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::id;
 use objc::runtime::{Class, Object, Sel};
-use objc::declare::ClassDecl;
 
 use std::mem;
 use std::os::raw::{c_char, c_void};
@@ -16,7 +15,13 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 
 lazy_static! {
-	static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
+	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class(MEMBER_ID_BUTTON, BASE_CLASS, |decl| {
+			decl.add_method(sel!(mouseDown:),
+                    button_left_click as extern "C" fn(&Object, Sel, id));
+		    decl.add_method(sel!(rightMouseDown:),
+		                    button_right_click as extern "C" fn(&Object, Sel, id));
+    
+		}) };
 }
 
 const DEFAULT_PADDING: i32 = 6;
@@ -175,21 +180,11 @@ impl UiControl for Button {
     fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
         self.base.root_mut()
     }
-    fn on_added_to_container(&mut self, parent: &UiContainer, x: i32, y: i32) {
+    fn on_added_to_container(&mut self, parent: &UiContainer, _x: i32, _y: i32) {
 	    use plygui_api::development::UiDrawable;
     	
         let (pw, ph) = parent.draw_area_size();
         self.measure(pw, ph);
-		/*let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
-        
-        self.base.coords = Some((x as i32, y as i32));	        
-        
-        let mut frame: NSRect = self.base.frame();
-        frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
-                                 (self.base.measured_size.1 as i32 - tm - bm) as f64);
-        frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
-        let () = msg_send![self.base.control, setFrame: frame];*/
-		self.draw(Some((x, y)));
     }
     fn on_removed_from_container(&mut self, _: &UiContainer) {
         unsafe { self.base.on_removed_from_container(); }
@@ -311,19 +306,6 @@ impl development::UiDrawable for Button {
 #[allow(dead_code)]
 pub(crate) fn spawn() -> Box<UiControl> {
 	Button::new("")
-}
-
-unsafe fn register_window_class() -> common::RefClass {
-    let superclass = Class::get(BASE_CLASS).unwrap();
-    let mut decl = ClassDecl::new(MEMBER_ID_BUTTON, superclass).unwrap();
-
-    decl.add_method(sel!(mouseDown:),
-                    button_left_click as extern "C" fn(&Object, Sel, id));
-    decl.add_method(sel!(rightMouseDown:),
-                    button_right_click as extern "C" fn(&Object, Sel, id));
-    decl.add_ivar::<*mut c_void>(common::IVAR);
-
-    common::RefClass(decl.register())
 }
 
 extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {

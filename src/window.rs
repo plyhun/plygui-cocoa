@@ -130,8 +130,9 @@ impl UiSingleContainer for Window {
         }
         if let Some(new) = child.as_mut() {
         	let (_, _) = self.size();
-           unsafe { let () = msg_send![self.container, addSubview: new.native_id() as id]; }
-            new.on_added_to_container(self, 0, 0);            
+	        unsafe { let () = msg_send![self.container, addSubview: new.native_id() as id]; }
+            new.on_added_to_container(self, 0, 0);   
+            new.draw(Some((0, 0)));         
         }
         self.child = child;
 
