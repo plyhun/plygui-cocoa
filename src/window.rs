@@ -291,7 +291,7 @@ fn window_redraw(this: &Object) {
 
         if let Some(ref mut child) = window.child {
             child.measure(size.0 as u16, size.1 as u16);
-            child.draw(Some((0, 0))); //TODO padding
+            child.draw(Some((0, 0)));
         }
         if let Some(ref mut cb) = window.h_resize {
             let w2: &mut Window = mem::transmute(saved);

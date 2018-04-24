@@ -124,15 +124,12 @@ pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
     } else if let Some(parent) = has_cocoa_id_ivar(id, IVAR_PARENT) { 
         parent as cocoa_id
     } else {
-    	msg_send![id, superview] 
+        	msg_send![id, superview] 
     };
     if id_.is_null() || id_ == id {
         None
     } else {
-    	let clas: *mut Class = msg_send![id, class];
-	    let classp: *mut Class = msg_send![id_, class];
-	    println!("parent of {} is {}", (&*clas).name(), (&*classp).name());
-	    Some(id_)
+    	    Some(id_)
     }
 }
 pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: Sized {
