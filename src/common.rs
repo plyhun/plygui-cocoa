@@ -1,121 +1,146 @@
 use super::*;
 
-use std::{ptr, mem, str};
+use std::{ptr, mem, str, slice, marker, any};
 use std::os::raw::c_void;
-use std::slice;
 
 use self::cocoa::base::{class, id as cocoa_id};
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint, NSRange};
 use self::cocoa::appkit::NSView;
-use objc::runtime::{Class, Ivar, YES, NO, class_copyIvarList};
+use objc::runtime::{Class, Ivar, class_copyIvarList, YES, NO};
 use objc::declare::ClassDecl;
 
-use plygui_api::{development, ids, layout, types, callbacks};
+use plygui_api::{development, controls, types};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RefClass(pub *const Class);
 unsafe impl Sync for RefClass {}
 
+#[derive(Debug,Clone,Copy,PartialEq,Eq,PartialOrd,Ord,Hash)]
+pub struct CocoaId(cocoa_id);
+
+impl From<cocoa_id> for CocoaId {
+	fn from(a: cocoa_id) -> CocoaId {
+		CocoaId(a)
+	}
+}
+impl From<CocoaId> for cocoa_id {
+	fn from(a: CocoaId) -> cocoa_id {
+		a.0
+	}
+}
+impl From<CocoaId> for usize {
+	fn from(a: CocoaId) -> usize {
+		a.0 as usize
+	}
+}
+impl development::NativeId for CocoaId {}
+
 pub const IVAR: &str = "plyguiIvar";
 pub const IVAR_PARENT: &str = "plyguiIvarParent";
 
 #[repr(C)]
-pub struct CocoaControlBase {
-    pub control_base: development::UiControlCommon, 
-    
+pub struct CocoaControlBase<T: controls::Control + Sized + 'static> {
     pub control: cocoa_id,
     pub coords: Option<(i32, i32)>,
     pub measured_size: (u16, u16),
-    pub h_resize: Option<callbacks::Resize>,
-    
-    invalidate: unsafe fn(this: &mut CocoaControlBase),
+	_marker: marker::PhantomData<T>
 }
 
-impl CocoaControlBase {
-	pub fn with_params(class: RefClass, invalidate: unsafe fn(this: &mut CocoaControlBase), functions: development::UiMemberFunctions) -> CocoaControlBase {
+impl <T: controls::Control + Sized> CocoaControlBase<T> {
+	pub fn with_params(class: RefClass) -> CocoaControlBase<T> {
 		CocoaControlBase {
-        	control_base: development::UiControlCommon {
-	        	member_base: development::UiMemberCommon::with_params(types::Visibility::Visible, functions),
-		        layout: layout::Attributes {
-		            width: layout::Size::MatchParent,
-					height: layout::Size::WrapContent,
-					gravity: layout::gravity::CENTER_HORIZONTAL | layout::gravity::TOP,
-					..Default::default()
-	            },
-        	},
         	control: unsafe {
         		let rect = NSRect::new(NSPoint::new(0f64, 0f64), NSSize::new(0f64, 0f64));
 
 		        let mut control: cocoa_id = msg_send![class.0, alloc];
 		        control = msg_send![control, initWithFrame: rect];
-				control = msg_send![control, autorelease];
+				//control = msg_send![control, autorelease]; // pointer being freed was not allocated
 	        	control
 	        },
-            h_resize: None,
             coords: None,
             measured_size: (0, 0),
             
-            invalidate: invalidate
+            _marker: marker::PhantomData
         }
 	}
 	pub fn frame(&self) -> NSRect {
 		unsafe { msg_send![self.control, frame] }
 	}
-	pub fn invalidate(&mut self) {
-		unsafe { (self.invalidate)(self) }
-	}
-    pub unsafe fn on_removed_from_container(&mut self) {
+	pub unsafe fn on_removed_from_container(&mut self) {
         self.control.removeFromSuperview();
         let () = msg_send![self.control, dealloc];
         self.control = ptr::null_mut();
     }   
-    pub fn set_visibility(&mut self, visibility: types::Visibility) {
-        if self.control_base.member_base.visibility != visibility {
-            self.control_base.member_base.visibility = visibility;
-            unsafe {
-                let () = match self.control_base.member_base.visibility {
-                    types::Visibility::Visible => {
-                        msg_send![self.control, setHidden: NO]
-                    }
-                    _ => {
-                        msg_send![self.control, setHidden: YES]
-                    }
-                };
-            }
-            self.invalidate();
-        }
-    }
-    pub fn visibility(&self) -> types::Visibility {
-        self.control_base.member_base.visibility
-    }
-    pub fn id(&self) -> ids::Id {
-        self.control_base.member_base.id
-    }
     pub fn parent_cocoa_id(&self) -> Option<cocoa_id> {
     	unsafe {
     		parent_cocoa_id(self.control, false)
     	}
     }
-    pub fn parent(&self) -> Option<&types::UiMemberBase> {
+    pub fn parent(&self) -> Option<&controls::Member> {
         unsafe {
-            parent_cocoa_id(self.control, false).and_then(|id| cast_cocoa_id(id))
+            parent_cocoa_id(self.control, false).and_then(|id| member_base_from_cocoa_id(id).map(|m|m.as_member()))
         }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
+    pub fn parent_mut(&mut self) -> Option<&mut controls::Member> {
         unsafe {
-            parent_cocoa_id(self.control, false).and_then(|id| cast_cocoa_id_mut(id))
+            parent_cocoa_id(self.control, false).and_then(|id| member_base_from_cocoa_id_mut(id).map(|m|m.as_member_mut()))
         }
     }
-    pub fn root(&self) -> Option<&types::UiMemberBase> {
+    pub fn root(&self) -> Option<&controls::Member> {
         unsafe {
-            parent_cocoa_id(self.control, true).and_then(|id| cast_cocoa_id(id))
+            parent_cocoa_id(self.control, true).and_then(|id| member_base_from_cocoa_id(id).map(|m|m.as_member()))
         }
     }
-    pub fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
+    pub fn root_mut(&mut self) -> Option<&mut controls::Member> {
         unsafe {
-            parent_cocoa_id(self.control, true).and_then(|id| cast_cocoa_id_mut(id))
+            parent_cocoa_id(self.control, true).and_then(|id| member_base_from_cocoa_id_mut(id).map(|m|m.as_member_mut()))
         }
     }
+    pub fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    	unsafe {
+            let () = if types::Visibility::Visible == base.visibility {
+                msg_send![self.control, setHidden: NO]
+            } else {
+                msg_send![self.control, setHidden: YES]
+            };
+        }
+    	self.invalidate();
+    }
+    pub fn invalidate(&mut self) {
+		use objc::runtime::YES;
+		
+		let parent_id = self.parent_cocoa_id();	
+		if let Some(parent_id) = parent_id {
+			let mparent = unsafe { member_base_from_cocoa_id_mut(parent_id).unwrap().as_member_mut() };
+			let (pw, ph) = mparent.size();
+			let this = unsafe { member_from_cocoa_id_mut::<T>(self.control).unwrap() };
+			
+			let (_,_,changed) = this.measure(pw, ph);
+			
+			if changed {
+				let mparent_type = mparent.as_any().get_type_id();
+				if let Some(control) = mparent.is_control_mut() {
+					control.invalidate();
+				} else if mparent_type == any::TypeId::of::<Window>() {
+					this.draw(None);	
+					unsafe { let () = msg_send![parent_id, setNeedsDisplay:YES]; }
+				} else {
+					panic!("Parent member is unsupported, neither a control, nor a window");
+				}
+			} else {
+				this.draw(None);	
+			}
+	    }
+	}
+}
+
+impl <T: controls::Control + Sized> Drop for CocoaControlBase<T> {
+	fn drop(&mut self) {
+		unsafe {
+			let () = msg_send![self.control, dealloc];
+			self.control = ptr::null_mut();
+        }
+	}
 }
 
 pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
@@ -132,10 +157,16 @@ pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
     	    Some(id_)
     }
 }
-pub unsafe fn cast_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: Sized {
+pub unsafe fn member_base_from_cocoa_id_mut<'a>(id: cocoa_id) -> Option<&'a mut development::MemberBase> {
 	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *mut ::std::os::raw::c_void))
 }
-pub unsafe fn cast_cocoa_id<'a, T>(id: cocoa_id) -> Option<&'a T> where T: Sized {
+pub unsafe fn member_base_from_cocoa_id<'a>(id: cocoa_id) -> Option<&'a development::MemberBase> {
+	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *const ::std::os::raw::c_void))
+}
+pub unsafe fn member_from_cocoa_id_mut<'a, T>(id: cocoa_id) -> Option<&'a mut T> where T: controls::Member + Sized {
+	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *mut ::std::os::raw::c_void))
+}
+pub unsafe fn member_from_cocoa_id<'a, T>(id: cocoa_id) -> Option<&'a T> where T: controls::Member + Sized {
 	cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *const ::std::os::raw::c_void))
 }
 pub unsafe fn cast_cocoa_id_to_ptr<'a>(id: cocoa_id) -> Option<*mut c_void> {
@@ -203,37 +234,4 @@ pub unsafe fn register_window_class<F>(name: &str, base: &str, mut f: F) -> RefC
     f(&mut decl);
 
     common::RefClass(decl.register())
-}
-
-#[macro_export]
-macro_rules! impl_invalidate {
-	($typ: ty) => {
-		unsafe fn invalidate_impl(this: &mut common::CocoaControlBase) {
-			use plygui_api::development::UiDrawable;
-			use plygui_api::members::MEMBER_ID_WINDOW;
-			use objc::runtime::YES;
-			
-			let parent_hwnd = this.parent_cocoa_id();	
-			if let Some(parent_hwnd) = parent_hwnd {
-				let mparent = common::cast_cocoa_id_mut::<plygui_api::development::UiMemberCommon>(parent_hwnd).unwrap();
-				let (pw, ph) = mparent.size();
-				let this: &mut $typ = mem::transmute(this);
-				
-				let (_,_,changed) = this.measure(pw, ph);
-				
-				if changed {
-					if mparent.is_control().is_some() {
-						common::cast_cocoa_id_mut::<common::CocoaControlBase>(parent_hwnd).unwrap().invalidate();
-					} else if mparent.member_id() == MEMBER_ID_WINDOW {
-						this.draw(None);	
-						let () = msg_send![parent_hwnd, setNeedsDisplay:YES];
-					} else {
-						panic!("Parent member {} is unsupported, neither a control, nor a window", mparent.member_id());
-					}
-				} else {
-					this.draw(None);	
-				}
-		    }
-		}
-	}
 }

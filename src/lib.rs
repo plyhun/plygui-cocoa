@@ -1,4 +1,5 @@
 #![cfg(target_os="macos")]
+#![feature(get_type_id)] 
 
 #[macro_use]
 extern crate lazy_static;

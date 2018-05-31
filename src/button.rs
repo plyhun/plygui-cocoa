@@ -1,8 +1,7 @@
 use super::*;
 
-use plygui_api::{layout, types, development, callbacks};
-use plygui_api::traits::{UiControl, UiHasLayout, UiClickable, UiHasLabel, UiButton, UiMember, UiContainer};
-use plygui_api::members::MEMBER_ID_BUTTON;
+use plygui_api::{layout, types, development, callbacks, controls};
+use plygui_api::development::{HasInner, Drawable};
 
 use self::cocoa::appkit::NSBezelStyle;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
@@ -15,11 +14,11 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 
 lazy_static! {
-	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class(MEMBER_ID_BUTTON, BASE_CLASS, |decl| {
+	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiButton", BASE_CLASS, |decl| {
 			decl.add_method(sel!(mouseDown:),
-                    button_left_click as extern "C" fn(&Object, Sel, id));
+                    button_left_click as extern "C" fn(&mut Object, Sel, id));
 		    decl.add_method(sel!(rightMouseDown:),
-		                    button_right_click as extern "C" fn(&Object, Sel, id));
+		                    button_right_click as extern "C" fn(&mut Object, Sel, id));
     
 		}) };
 }
@@ -27,50 +26,52 @@ lazy_static! {
 const DEFAULT_PADDING: i32 = 6;
 const BASE_CLASS: &str = "NSButton";
 
+pub type Button = development::Member<development::Control<CocoaButton>>;
+
 #[repr(C)]
-pub struct Button {
-    base: common::CocoaControlBase,
+pub struct CocoaButton {
+    base: common::CocoaControlBase<Button>,
 
     h_left_clicked: Option<callbacks::Click>,
     h_right_clicked: Option<callbacks::Click>,
 }
 
-impl Button {
-    pub fn new(label: &str) -> Box<Button> {
-    	let mut b = Box::new(Button {
-                     base: common::CocoaControlBase::with_params(
-                     	*WINDOW_CLASS,
-		                     	invalidate_impl,
-                             	development::UiMemberFunctions {
-		                             fn_member_id: member_id,
-								     fn_is_control: is_control,
-								     fn_is_control_mut: is_control_mut,
-								     fn_size: size,
-	                             },
-                             ),
-                     h_left_clicked: None,
-                     h_right_clicked: None,
-                 });
+impl development::ButtonInner for CocoaButton {
+	fn with_label(label: &str) -> Box<controls::Button> {
+		use plygui_api::controls::{HasLayout, HasLabel};
+		
+		let mut b = Box::new(
+			development::Member::with_inner(
+				development::Control::with_inner(
+					CocoaButton {
+	                     base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+	                     h_left_clicked: None,
+	                     h_right_clicked: None,
+	                 }, 
+					()
+				), development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
+			)
+		);
         let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-        	(&mut *b.base.control).set_ivar(common::IVAR, selfptr);
-		    let () = msg_send![b.base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle]; 
+        	(&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
+		    let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle]; 
         }       	    
         b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b.set_label(label);
         b
-    }
+	}
 }
 
-impl UiHasLabel for Button {
-	fn label<'a>(&'a self) -> Cow<'a,str> {
+impl development::HasLabelInner for CocoaButton {
+	fn label(&self) -> Cow<str> {
 		unsafe {
 			let label: id = msg_send![self.base.control, title];
 			let label: *const c_void = msg_send![label, UTF8String];
 	        CStr::from_ptr(label as *const c_char).to_string_lossy()
 		}
     }
-    fn set_label(&mut self, label: &str) {
+    fn set_label(&mut self, _: &mut development::MemberBase, label: &str) {
 	    unsafe {
 			let title = NSString::alloc(cocoa::base::nil).init_str(label);
     		let () = msg_send![self.base.control, setTitle:title];
@@ -78,178 +79,77 @@ impl UiHasLabel for Button {
 		}
     }
 }
-impl UiClickable for Button {
+
+impl development::ClickableInner for CocoaButton {
 	fn on_click(&mut self, cb: Option<callbacks::Click>) {
-        self.h_left_clicked = cb;
-    }
-}
-impl UiButton for Button {
-    /*fn on_right_click(&mut self, cb: Option<Box<FnMut(&mut UiButton)>>) {
-        self.h_right_clicked = cb;
-    }*/
-    
-    fn as_control(&self) -> &UiControl {
-	    	self
-    }
-	fn as_control_mut(&mut self) -> &mut UiControl {
-		self
-	}
-	fn as_clickable(&self) -> &UiClickable {
-	    	self
-    }
-	fn as_clickable_mut(&mut self) -> &mut UiClickable {
-		self
-	}
-	fn as_has_label(&self) -> &UiHasLabel {
-	    self
-    }
-	fn as_has_label_mut(&mut self) -> &mut UiHasLabel {
-		self
+		self.h_left_clicked = cb;
 	}
 }
 
-impl UiHasLayout for Button {
-	fn layout_width(&self) -> layout::Size {
-    	self.base.control_base.layout.width
-    }
-	fn layout_height(&self) -> layout::Size {
-		self.base.control_base.layout.height
+impl development::ControlInner for CocoaButton {
+	fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &controls::Container, _x: i32, _y: i32) {
+		let (pw, ph) = parent.draw_area_size();
+        self.measure(base, pw, ph);
 	}
-	fn layout_gravity(&self) -> layout::Gravity {
-		self.base.control_base.layout.gravity
-	}
-	fn layout_alignment(&self) -> layout::Alignment {
-		self.base.control_base.layout.alignment
-	}
-	fn layout_padding(&self) -> layout::BoundarySize {
-		self.base.control_base.layout.padding
-	}
-    fn layout_margin(&self) -> layout::BoundarySize {
-	    self.base.control_base.layout.margin
-    }
-
-    fn set_layout_padding(&mut self, padding: layout::BoundarySizeArgs) {
-	    self.base.control_base.layout.padding = padding.into();
-		self.base.invalidate();
-    }
-    fn set_layout_margin(&mut self, margin: layout::BoundarySizeArgs) {
-	    self.base.control_base.layout.margin = margin.into();
-		self.base.invalidate();
-    }
-	fn set_layout_width(&mut self, width: layout::Size) {
-		self.base.control_base.layout.width = width;
-		self.base.invalidate();
-	}
-	fn set_layout_height(&mut self, height: layout::Size) {
-		self.base.control_base.layout.height = height;
-		self.base.invalidate();
-	}
-	fn set_layout_gravity(&mut self, gravity: layout::Gravity) {
-		self.base.control_base.layout.gravity = gravity;
-		self.base.invalidate();
-	}
-	fn set_layout_alignment(&mut self, alignment: layout::Alignment) {
-		self.base.control_base.layout.alignment = alignment;
-		self.base.invalidate();
-	}   
-	fn as_member(&self) -> &UiMember {
-		self
-	}
-	fn as_member_mut(&mut self) -> &mut UiMember {
-		self
-	}
-}
-
-impl UiControl for Button {
-    fn is_container_mut(&mut self) -> Option<&mut UiContainer> {
-        None
-    }
-    fn is_container(&self) -> Option<&UiContainer> {
-        None
+    fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &controls::Container) {
+    	unsafe { self.base.on_removed_from_container(); }
     }
     
-    fn parent(&self) -> Option<&types::UiMemberBase> {
-        self.base.parent()
+    fn parent(&self) -> Option<&controls::Member> {
+    	self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut types::UiMemberBase> {
-        self.base.parent_mut()
+    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    	self.base.parent_mut()
     }
-    fn root(&self) -> Option<&types::UiMemberBase> {
-        self.base.root()
+    fn root(&self) -> Option<&controls::Member> {
+    	self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut types::UiMemberBase> {
-        self.base.root_mut()
+    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    	self.base.root_mut()
     }
-    fn on_added_to_container(&mut self, parent: &UiContainer, _x: i32, _y: i32) {
-	    use plygui_api::development::UiDrawable;
-    	
-        let (pw, ph) = parent.draw_area_size();
-        self.measure(pw, ph);
-    }
-    fn on_removed_from_container(&mut self, _: &UiContainer) {
-        unsafe { self.base.on_removed_from_container(); }
-    }	
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut MemberControlBase, mberarkup: &super::markup::Markup, registry: &mut super::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_BUTTON;
     	
     	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
     	fill_from_markup_label!(self, markup);
-    	//fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut UiButton)]);
-    	
-    	if let Some(on_left_click) = markup.attributes.get("on_left_click") {
-    		let callback: callbacks::Click = registry.pop_callback(on_left_click.as_attribute()).unwrap();
-    		self.on_left_click(Some(callback));
-    	}
+    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut Button)]);
     }
-    fn as_has_layout(&self) -> &UiHasLayout {
-    	self
+}
+
+impl development::MemberInner for CocoaButton {
+	type Id = common::CocoaId;
+	
+    fn size(&self) -> (u16, u16) {
+    	self.base.measured_size
     }
-	fn as_has_layout_mut(&mut self) -> &mut UiHasLayout {
-		self
+    
+    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    	self.base.on_set_visibility(base);
+    }
+    
+    unsafe fn native_id(&self) -> Self::Id {
+    	self.base.control.into()
+    }
+}
+
+impl development::HasLayoutInner for CocoaButton {
+	fn on_layout_changed(&mut self, _: &mut development::MemberBase) {
+		self.base.invalidate();
 	}
 }
 
-impl UiMember for Button {
-    fn set_visibility(&mut self, visibility: types::Visibility) {
-        self.base.set_visibility(visibility);
-    }
-    fn visibility(&self) -> types::Visibility {
-        self.base.visibility()
-    }
-    fn size(&self) -> (u16, u16) {
-        self.base.measured_size
-    }
-    fn on_resize(&mut self, handler: Option<callbacks::Resize>) {
-        self.base.h_resize = handler;
-    }
-	
-    unsafe fn native_id(&self) -> usize {
-        self.base.control as usize
-    }
-    fn is_control(&self) -> Option<&UiControl> {
-    	Some(self)
-    }
-    fn is_control_mut(&mut self) -> Option<&mut UiControl> {
-    	Some(self)
-    } 
-    fn as_base(&self) -> &types::UiMemberBase {
-    	self.base.control_base.member_base.as_ref()
-    }
-    fn as_base_mut(&mut self) -> &mut types::UiMemberBase {
-    	self.base.control_base.member_base.as_mut()
-    }
-}
-
-impl development::UiDrawable for Button {
-	fn draw(&mut self, coords: Option<(i32, i32)>) {
+impl development::Drawable for CocoaButton {
+	fn draw(&mut self, base: &mut development::MemberControlBase, coords: Option<(i32, i32)>) {
+		use plygui_api::development::ControlInner;
+		
     	if coords.is_some() {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
-	        let (_,ph) = self.parent().unwrap().as_ref().size();
+    		let (lm, tm, rm, bm) = base.control.layout.margin.into();
+	        let (_,ph) = self.parent_mut().unwrap().is_container_mut().unwrap().draw_area_size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
 	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
@@ -257,7 +157,7 @@ impl development::UiDrawable for Button {
 	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
 	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
-    		if let Some(ref mut cb) = self.base.h_resize {
+    		if let Some(ref mut cb) = base.member.handler_resize {
 	            unsafe {
 	                let object: &Object = mem::transmute(self.base.control);
 	                let saved: *mut c_void = *object.get_ivar(common::IVAR);
@@ -267,18 +167,18 @@ impl development::UiDrawable for Button {
 	        }
     	}
     }
-    fn measure(&mut self, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, base: &mut development::MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
     	
     	let old_size = self.base.measured_size;
-        let (lp, tp, rp, bp) = self.base.control_base.layout.padding.into();
-        let (lm, tm, rm, bm) = self.base.control_base.layout.margin.into();
+        let (lp, tp, rp, bp) = base.control.layout.padding.into();
+        let (lm, tm, rm, bm) = base.control.layout.margin.into();
 
-		self.base.measured_size = match self.visibility() {
+		self.base.measured_size = match base.member.visibility {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size = (0, 0);
-                let w = match self.base.control_base.layout.width {
+                let w = match base.control.layout.width {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
@@ -286,7 +186,7 @@ impl development::UiDrawable for Button {
                         label_size.0 as i32 + lm + rm + lp + rp
                     } 
                 };
-                let h = match self.base.control_base.layout.height {
+                let h = match base.control.layout.height {
                     layout::Size::MatchParent => parent_height as i32,
                     layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
@@ -301,38 +201,36 @@ impl development::UiDrawable for Button {
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
+    fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    	self.base.invalidate();
+    }
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<UiControl> {
-	Button::new("")
+pub(crate) fn spawn() -> Box<controls::Control> {
+	Button::with_label("").into_control()
 }
 
-extern "C" fn button_left_click(this: &Object, _: Sel, param: id) {
+extern "C" fn button_left_click(this: &mut Object, _: Sel, param: id) {
 	unsafe {
-        let saved: *mut c_void = *this.get_ivar(common::IVAR);
-        let button: &mut Button = mem::transmute(saved.clone());
-        let () = msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
-        if let Some(ref mut cb) = button.h_left_clicked {
-            let b2: &mut Button = mem::transmute(saved);
+        let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
+        let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
+        if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+            let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
             (cb.as_mut())(b2);
         }
     }
 }
-extern "C" fn button_right_click(this: &Object, _: Sel, param: id) {
+extern "C" fn button_right_click(this: &mut Object, _: Sel, param: id) {
     //println!("right!");
     unsafe {
-        let saved: *mut c_void = *this.get_ivar(common::IVAR);
-        let button: &mut Button = mem::transmute(saved.clone());
-        if let Some(ref mut cb) = button.h_right_clicked {
-            let b2: &mut Button = mem::transmute(saved);
+        let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
+        if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_right_clicked {
+            let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
             (cb.as_mut())(b2);
         }
-        let () = msg_send![super(button.base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
+        let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
     }
 }
 
-impl_invalidate!(Button);
-impl_is_control!(Button);
-impl_size!(Button);
-impl_member_id!(MEMBER_ID_BUTTON);
+impl_all_defaults!(Button);
