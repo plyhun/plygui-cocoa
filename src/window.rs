@@ -4,7 +4,7 @@ use plygui_api::{development, ids, types, controls, layout};
 use plygui_api::development::HasInner;
 
 use self::cocoa::appkit::{NSWindow, NSWindowStyleMask, NSBackingStoreBuffered};
-use self::cocoa::foundation::{NSString, NSAutoreleasePool, NSRect, NSSize, NSPoint};
+use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::{id, nil};
 use objc::runtime::{Class, Object, Sel, BOOL, YES, NO};
 use objc::declare::ClassDecl;

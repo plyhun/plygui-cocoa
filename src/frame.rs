@@ -6,7 +6,7 @@ use plygui_api::development::{Drawable, HasInner};
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
 use self::cocoa::base::id as cocoa_id;
 
-use std::mem;
+use std::{ptr, mem};
 use std::os::raw::{c_char, c_void};
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -40,12 +40,21 @@ impl development::FrameInner for CocoaFrame {
 				    child: None,
                  }, ()), ())
 				, development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)));
-        let selfptr = frame.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+		let selfptr = frame.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe { (&mut *frame.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr); }
         frame.set_label(label);
         frame
 	}
 }
+
+/*impl Drop for CocoaFrame {
+	fn drop(&mut self) {
+		if let Some(outer) = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control) } {
+			use plygui_api::development::SingleContainerInner;
+			self.set_child(outer.base_mut(), None);
+		}
+	}
+}*/
 
 impl CocoaFrame {
     fn measure_label(&mut self) {
@@ -66,7 +75,11 @@ impl development::SingleContainerInner for CocoaFrame {
         	}
         } 
 		if let Some(ref mut old) = old {
-	        unsafe { let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview]; }
+			unsafe {
+				let child_id = old.native_id() as cocoa_id;
+		        *(&mut *child_id).get_mut_ivar::<*mut c_void>(common::IVAR_PARENT) = ptr::null_mut();
+		        let () = msg_send![child_id, removeFromSuperview]; 
+			}
         }
         old
     }

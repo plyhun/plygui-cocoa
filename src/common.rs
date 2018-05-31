@@ -54,8 +54,8 @@ impl <T: controls::Control + Sized> CocoaControlBase<T> {
 
 		        let mut control: cocoa_id = msg_send![class.0, alloc];
 		        control = msg_send![control, initWithFrame: rect];
-				//control = msg_send![control, autorelease]; // pointer being freed was not allocated
-	        	control
+		        //control = msg_send![control, setPostsFrameChangedNotifications: YES];
+				control
 	        },
             coords: None,
             measured_size: (0, 0),
@@ -141,7 +141,9 @@ impl <T: controls::Control + Sized> CocoaControlBase<T> {
 impl <T: controls::Control + Sized> Drop for CocoaControlBase<T> {
 	fn drop(&mut self) {
 		unsafe {
-			let () = msg_send![self.control, dealloc];
+			self.on_removed_from_container();
+			let () = msg_send![self.control, release];
+			//let () = msg_send![self.control, dealloc];
 		}
 	}
 }
@@ -152,12 +154,12 @@ pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
     } else if let Some(parent) = has_cocoa_id_ivar(id, IVAR_PARENT) { 
         parent as cocoa_id
     } else {
-        	msg_send![id, superview] 
+        msg_send![id, superview] 
     };
     if id_.is_null() || id_ == id {
         None
     } else {
-    	    Some(id_)
+    	Some(id_)
     }
 }
 pub unsafe fn member_base_from_cocoa_id_mut<'a>(id: cocoa_id) -> Option<&'a mut development::MemberBase> {
