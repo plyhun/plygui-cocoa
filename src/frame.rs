@@ -165,9 +165,12 @@ impl development::ControlInner for CocoaFrame {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, mberarkup: &super::markup::Markup, registry: &mut super::markup::MarkupRegistry) {
-    	fill_from_markup_base!(self, markup, registry, Frame, [MEMBER_TYPE_FRAME]);
-		fill_from_markup_children!(self, markup, registry);	
+    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    	use plygui_api::markup::MEMBER_TYPE_FRAME;
+    	
+    	fill_from_markup_base!(self, base, markup, registry, Frame, [MEMBER_TYPE_FRAME]);
+    	fill_from_markup_label!(self, &mut base.member, markup);
+		fill_from_markup_child!(self, &mut base.member, markup, registry);	
     }
 }
 
@@ -282,6 +285,11 @@ impl development::Drawable for CocoaFrame {
     fn invalidate(&mut self, _: &mut development::MemberControlBase) {
     	self.base.invalidate();
     }
+}
+
+#[allow(dead_code)]
+pub(crate) fn spawn() -> Box<controls::Control> {
+    Frame::with_label("").into_control()
 }
 
 impl_all_defaults!(Frame);

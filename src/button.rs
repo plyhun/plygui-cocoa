@@ -109,12 +109,13 @@ impl development::ControlInner for CocoaButton {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberControlBase, mberarkup: &super::markup::Markup, registry: &mut super::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_BUTTON;
+    	use plygui_api::development::ClickableInner;
     	
-    	fill_from_markup_base!(self, markup, registry, Button, [MEMBER_ID_BUTTON, MEMBER_TYPE_BUTTON]);
-    	fill_from_markup_label!(self, markup);
-    	fill_from_markup_callbacks!(self, markup, registry, ["on_left_click" => FnMut(&mut Button)]);
+    	fill_from_markup_base!(self, base, markup, registry, Button, [MEMBER_TYPE_BUTTON]);
+    	fill_from_markup_label!(self, &mut base.member, markup);
+    	fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
     }
 }
 

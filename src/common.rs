@@ -130,6 +130,12 @@ impl <T: controls::Control + Sized> CocoaControlBase<T> {
 			}
 	    }
 	}
+    pub fn as_outer(&self) -> &T {
+    	unsafe { common::member_from_cocoa_id(self.control).unwrap() }
+    }
+    pub fn as_outer_mut(&mut self) -> &mut T {
+    	unsafe { common::member_from_cocoa_id_mut(self.control).unwrap() }
+    }
 }
 
 impl <T: controls::Control + Sized> Drop for CocoaControlBase<T> {
