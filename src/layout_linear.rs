@@ -212,7 +212,7 @@ impl development::Drawable for CocoaLinearLayout {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (_, ph) = self.parent().unwrap().is_container().unwrap().draw_area_size();
+    		let (_, ph) = self.parent().unwrap().is_container().unwrap().size();
 	        let (lp, tp, _, _) = base.control.layout.padding.into();
 	        let (lm, tm, rm, bm) = base.control.layout.margin.into();
 	        unsafe {

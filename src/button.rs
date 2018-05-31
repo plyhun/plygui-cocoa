@@ -149,7 +149,7 @@ impl development::Drawable for CocoaButton {
     	}
     	if let Some((x, y)) = self.base.coords {
     		let (lm, tm, rm, bm) = base.control.layout.margin.into();
-	        let (_,ph) = self.parent_mut().unwrap().is_container_mut().unwrap().draw_area_size();
+	        let (_,ph) = self.parent_mut().unwrap().is_container_mut().unwrap().size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
 	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,

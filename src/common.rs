@@ -1,6 +1,6 @@
 use super::*;
 
-use std::{ptr, mem, str, slice, marker, any};
+use std::{mem, str, slice, marker, any};
 use std::os::raw::c_void;
 
 use self::cocoa::base::{class, id as cocoa_id};
@@ -68,8 +68,6 @@ impl <T: controls::Control + Sized> CocoaControlBase<T> {
 	}
 	pub unsafe fn on_removed_from_container(&mut self) {
         self.control.removeFromSuperview();
-        let () = msg_send![self.control, dealloc];
-        self.control = ptr::null_mut();
     }   
     pub fn parent_cocoa_id(&self) -> Option<cocoa_id> {
     	unsafe {
@@ -138,8 +136,7 @@ impl <T: controls::Control + Sized> Drop for CocoaControlBase<T> {
 	fn drop(&mut self) {
 		unsafe {
 			let () = msg_send![self.control, dealloc];
-			self.control = ptr::null_mut();
-        }
+		}
 	}
 }
 

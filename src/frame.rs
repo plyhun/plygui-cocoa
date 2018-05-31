@@ -11,7 +11,7 @@ use std::os::raw::{c_char, c_void};
 use std::borrow::Cow;
 use std::ffi::CStr;
 
-const INNER_PADDING: i32 = 7;
+const INNER_PADDING: i32 = 5;
 
 lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", "NSBox", |_|{}) };
@@ -203,7 +203,7 @@ impl development::Drawable for CocoaFrame {
     	if let Some((x, y)) = self.base.coords {
     		let (lp, tp, _, _) = base.control.layout.padding.into();
     	    let (lm, tm, rm, bm) = base.control.layout.margin.into();
-	        let (_,ph) = self.parent().unwrap().is_container().unwrap().draw_area_size();
+	        let (_,ph) = self.parent().unwrap().is_container().unwrap().size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
 	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,

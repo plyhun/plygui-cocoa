@@ -64,8 +64,7 @@ impl development::WindowInner for CocoaWindow {
                 .initWithContentRect_styleMask_backing_defer_(rect,
                                                               NSWindowStyleMask::NSClosableWindowMask | NSWindowStyleMask::NSResizableWindowMask | NSWindowStyleMask::NSMiniaturizableWindowMask | NSWindowStyleMask::NSTitledWindowMask,
                                                               NSBackingStoreBuffered,
-                                                              NO)
-                .autorelease();
+                                                              NO);
             let () = msg_send![window ,cascadeTopLeftFromPoint: NSPoint::new(20., 20.)];
             window.center();
             let title = NSString::alloc(cocoa::base::nil).init_str(title);
@@ -74,9 +73,7 @@ impl development::WindowInner for CocoaWindow {
             let current_app = cocoa::appkit::NSRunningApplication::currentApplication(cocoa::base::nil);
             let () = msg_send![current_app, activateWithOptions: cocoa::appkit::NSApplicationActivateIgnoringOtherApps];
 
-            let view = NSView::alloc(nil)
-                .initWithFrame_(rect)
-                .autorelease();
+            let view = NSView::alloc(nil).initWithFrame_(rect);
             let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(development::Member::with_inner(development::SingleContainer::with_inner(CocoaWindow {
