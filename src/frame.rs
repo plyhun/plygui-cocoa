@@ -11,7 +11,8 @@ use std::os::raw::{c_char, c_void};
 use std::borrow::Cow;
 use std::ffi::CStr;
 
-const INNER_PADDING: i32 = 5;
+const INNER_PADDING_H: i32 = 7; // TODO: WHY???
+const INNER_PADDING_V: i32 = 5; // TODO: WHY???
 
 lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", "NSBox", |_|{}) };
@@ -46,15 +47,6 @@ impl development::FrameInner for CocoaFrame {
         frame
 	}
 }
-
-/*impl Drop for CocoaFrame {
-	fn drop(&mut self) {
-		if let Some(outer) = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control) } {
-			use plygui_api::development::SingleContainerInner;
-			self.set_child(outer.base_mut(), None);
-		}
-	}
-}*/
 
 impl CocoaFrame {
     fn measure_label(&mut self) {
@@ -153,7 +145,7 @@ impl development::ControlInner for CocoaFrame {
 	        unsafe { let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id]; }
 	        let (lm, tm, _, _) = base.control.layout.margin.into();
 	        let (lp, tp, _, _) = base.control.layout.padding.into();
-            child.on_added_to_container(frame2, lp + lm, tp + tm + INNER_PADDING + self.label_padding.1 as i32);
+            child.on_added_to_container(frame2, lp + lm, tp + tm + INNER_PADDING_H + self.label_padding.1 as i32);
         }
 	}
     fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &controls::Container) {
@@ -228,7 +220,7 @@ impl development::Drawable for CocoaFrame {
 	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
     		if let Some(ref mut child) = self.child {
-    	        child.draw(Some((lp, tp + INNER_PADDING + self.label_padding.1 as i32)));  
+    	        child.draw(Some((lp, tp + INNER_PADDING_H + self.label_padding.1 as i32)));  
     	    }
     		if let Some(ref mut cb) = base.member.handler_resize {
 	            unsafe {
@@ -244,8 +236,8 @@ impl development::Drawable for CocoaFrame {
     	let old_size = self.base.measured_size;
     	let (lp,tp,rp,bp) = base.control.layout.padding.into();
     	let (lm,tm,rm,bm) = base.control.layout.margin.into();
-    	let hp = lm + rm + lp + rp;
-    	let vp = tm + bm + tp + bp;
+    	let hp = lm + rm + lp + rp + INNER_PADDING_H + INNER_PADDING_H;
+    	let vp = tm + bm + tp + bp + INNER_PADDING_V;
     	self.base.measured_size = match base.member.visibility {
         	types::Visibility::Gone => (0,0),
         	_ => {
