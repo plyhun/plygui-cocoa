@@ -236,7 +236,7 @@ impl development::Drawable for CocoaFrame {
     	let old_size = self.base.measured_size;
     	let (lp,tp,rp,bp) = base.control.layout.padding.into();
     	let (lm,tm,rm,bm) = base.control.layout.margin.into();
-    	let hp = lm + rm + lp + rp + INNER_PADDING_H + INNER_PADDING_H;
+    	let hp = lm + rm + lp + rp + INNER_PADDING_H + INNER_PADDING_H + 1;
     	let vp = tm + bm + tp + bp + INNER_PADDING_V;
     	self.base.measured_size = match base.member.visibility {
         	types::Visibility::Gone => (0,0),
