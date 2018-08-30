@@ -1,15 +1,7 @@
 use super::*;
+use super::common::*;
 
-use plygui_api::{layout, ids, types, development, controls};
-use plygui_api::development::{Drawable, HasInner};
-
-use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
-use self::cocoa::base::id as cocoa_id;
-
-use std::{ptr, mem};
-use std::os::raw::{c_char, c_void};
-use std::borrow::Cow;
-use std::ffi::CStr;
+pub use std::os::raw::c_char;
 
 const INNER_PADDING_H: i32 = 7; // TODO: WHY???
 const INNER_PADDING_V: i32 = 5; // TODO: WHY???
@@ -18,29 +10,25 @@ lazy_static! {
 	static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", "NSBox", |_|{}) };
 }
 
-pub type Frame = development::Member<development::Control<development::SingleContainer<CocoaFrame>>>;
+pub type Frame = Member<Control<SingleContainer<CocoaFrame>>>;
 
 #[repr(C)]
 pub struct CocoaFrame {
     base: common::CocoaControlBase<Frame>,
     label_padding: (i32, i32),
-    gravity_horizontal: layout::Gravity,
-    gravity_vertical: layout::Gravity,
     child: Option<Box<controls::Control>>,
 }
 
-impl development::FrameInner for CocoaFrame {
-	fn with_label(label: &str) -> Box<controls::Frame> {
+impl FrameInner for CocoaFrame {
+	fn with_label(label: &str) -> Box<Frame> {
 		use plygui_api::controls::HasLabel;
 		
-		let mut frame = Box::new(development::Member::with_inner(development::Control::with_inner(development::SingleContainer::with_inner(CocoaFrame {
+		let mut frame = Box::new(Member::with_inner(Control::with_inner(SingleContainer::with_inner(CocoaFrame {
                      base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
                      label_padding: (0, 0),
-                     gravity_horizontal: Default::default(),
-				    gravity_vertical: Default::default(),
-				    child: None,
+                     child: None,
                  }, ()), ())
-				, development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)));
+				, MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)));
 		let selfptr = frame.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe { (&mut *frame.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr); }
         frame.set_label(label);
@@ -55,8 +43,8 @@ impl CocoaFrame {
     }
 }
 
-impl development::SingleContainerInner for CocoaFrame {
-	fn set_child(&mut self, _: &mut development::MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+impl SingleContainerInner for CocoaFrame {
+	fn set_child(&mut self, _: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
         let mut old = self.child.take();
         self.child = child;
         if let Some(ref mut child) = self.child {
@@ -87,7 +75,7 @@ impl development::SingleContainerInner for CocoaFrame {
     }
 }
 
-impl development::ContainerInner for CocoaFrame {
+impl ContainerInner for CocoaFrame {
 	fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
 		if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
@@ -104,28 +92,17 @@ impl development::ContainerInner for CocoaFrame {
         }
         None
     }
-    
-    fn gravity(&self) -> (layout::Gravity, layout::Gravity) {
-    	(self.gravity_horizontal, self.gravity_vertical)
-    }
-    fn set_gravity(&mut self, base: &mut development::MemberBase, w: layout::Gravity, h: layout::Gravity) {
-    	if self.gravity_horizontal != w || self.gravity_vertical != h {
-    		self.gravity_horizontal = w;
-    		self.gravity_vertical = h;
-    		self.invalidate(unsafe { mem::transmute(base) });
-    	}
-    }
 }
 
-impl development::HasLabelInner for CocoaFrame {
+impl HasLabelInner for CocoaFrame {
 	fn label(&self) -> Cow<str> {
 		unsafe {
 			let label: cocoa_id = msg_send![self.base.control, getTitle];
 			let label: *const c_void = msg_send![label, UTF8String];
-	        CStr::from_ptr(label as *const c_char).to_string_lossy()
+	        ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
 		}
     }
-    fn set_label(&mut self, _: &mut development::MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
 	    unsafe {
 			let title = NSString::alloc(cocoa::base::nil).init_str(label);
         		let () = msg_send![self.base.control, setTitle:title];
@@ -135,20 +112,18 @@ impl development::HasLabelInner for CocoaFrame {
     }
 }
 
-impl development::ControlInner for CocoaFrame {
-	fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &controls::Container, _x: i32, _y: i32) {
-		let (pw, ph) = parent.draw_area_size();
-        self.measure(base, pw, ph);
+impl ControlInner for CocoaFrame {
+	fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
+		self.measure(member, control, pw, ph);
 		
 		if let Some(ref mut child) = self.child {
         	let frame2 = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap() };
 	        unsafe { let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id]; }
-	        let (lm, tm, _, _) = base.control.layout.margin.into();
-	        let (lp, tp, _, _) = base.control.layout.padding.into();
-            child.on_added_to_container(frame2, lp + lm, tp + tm + INNER_PADDING_H + self.label_padding.1 as i32);
+	        let (pw, ph) = self.base.measured_size;
+            child.on_added_to_container(frame2, 0, INNER_PADDING_H + self.label_padding.1 as i32, pw, ph);
         }
 	}
-    fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
     	let frame2 = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap() };
         if let Some(ref mut child) = self.child {
             child.on_removed_from_container(frame2);
@@ -170,7 +145,7 @@ impl development::ControlInner for CocoaFrame {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_FRAME;
     	
     	fill_from_markup_base!(self, base, markup, registry, Frame, [MEMBER_TYPE_FRAME]);
@@ -179,14 +154,14 @@ impl development::ControlInner for CocoaFrame {
     }
 }
 
-impl development::MemberInner for CocoaFrame {
+impl MemberInner for CocoaFrame {
 	type Id = common::CocoaId;
 	
     fn size(&self) -> (u16, u16) {
     	self.base.measured_size
     }
     
-    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
     	self.base.on_set_visibility(base);
     }
     
@@ -195,54 +170,42 @@ impl development::MemberInner for CocoaFrame {
     }
 }
 
-impl development::HasLayoutInner for CocoaFrame {
-	fn on_layout_changed(&mut self, _: &mut development::MemberBase) {
+impl HasLayoutInner for CocoaFrame {
+	fn on_layout_changed(&mut self, _: &mut MemberBase) {
 		self.base.invalidate();
 	}
 }
 
-impl development::Drawable for CocoaFrame {
-	fn draw(&mut self, base: &mut development::MemberControlBase, coords: Option<(i32, i32)>) {
-		use plygui_api::development::ControlInner;
-		
-    	if coords.is_some() {
+impl Drawable for CocoaFrame {
+	fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
+		if coords.is_some() {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (lp, tp, _, _) = base.control.layout.padding.into();
-    	    let (lm, tm, rm, bm) = base.control.layout.margin.into();
-	        let (_,ph) = self.parent().unwrap().is_container().unwrap().size();
+    		let (_,ph) = self.parent().unwrap().is_container().unwrap().size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
-	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
-	                                     (self.base.measured_size.1 as i32 - tm - bm) as f64);
-	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - (y + bm + self.base.measured_size.1 as i32)) as f64);
+	            frame.size = NSSize::new((self.base.measured_size.0 as i32) as f64,
+	                                     (self.base.measured_size.1 as i32) as f64);
+	            frame.origin = NSPoint::new((x) as f64, (ph as i32 - (y + self.base.measured_size.1 as i32)) as f64);
 	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
     		if let Some(ref mut child) = self.child {
-    	        child.draw(Some((lp, tp + INNER_PADDING_H + self.label_padding.1 as i32)));  
+    	        child.draw(Some((0, INNER_PADDING_H + self.label_padding.1 as i32)));  
     	    }
-    		if let Some(ref mut cb) = base.member.handler_resize {
-	            unsafe {
-	                let mut frame2 = common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap();
-	                (cb.as_mut())(frame2, self.base.measured_size.0, self.base.measured_size.1);
-	            }
-	        }
     	}
     }
-    fn measure(&mut self, base: &mut development::MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
         	
     	let old_size = self.base.measured_size;
-    	let (lp,tp,rp,bp) = base.control.layout.padding.into();
-    	let (lm,tm,rm,bm) = base.control.layout.margin.into();
-    	let hp = lm + rm + lp + rp + INNER_PADDING_H + INNER_PADDING_H + 1;
-    	let vp = tm + bm + tp + bp + INNER_PADDING_V;
-    	self.base.measured_size = match base.member.visibility {
+    	let hp = INNER_PADDING_H + INNER_PADDING_H + 1;
+    	let vp = INNER_PADDING_V;
+    	self.base.measured_size = match member.visibility {
         	types::Visibility::Gone => (0,0),
         	_ => {
         		let mut measured = false;
-		        let w = match base.control.layout.width {
+		        let w = match control.layout.width {
         			layout::Size::Exact(w) => w,
         			layout::Size::MatchParent => parent_width,
         			layout::Size::WrapContent => {
@@ -258,7 +221,7 @@ impl development::Drawable for CocoaFrame {
     	        			max(0, w as i32 + hp) as u16
         			}
         		};
-        		let h = match base.control.layout.height {
+        		let h = match control.layout.height {
         			layout::Size::Exact(h) => h,
         			layout::Size::MatchParent => parent_height,
         			layout::Size::WrapContent => {
@@ -287,7 +250,7 @@ impl development::Drawable for CocoaFrame {
 	        self.base.measured_size != old_size,
         )
     }
-    fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
     	self.base.invalidate();
     }
 }

@@ -20,8 +20,6 @@ mod button;
 mod layout_linear;
 mod frame;
 
-pub type NativeId = cocoa::base::id;
-
 pub use self::application::Application;
 pub use self::window::Window;
 pub use self::button::Button;

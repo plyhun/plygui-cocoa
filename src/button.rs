@@ -1,7 +1,5 @@
 use super::*;
-
-use plygui_api::{layout, types, development, callbacks, controls};
-use plygui_api::development::{HasInner, Drawable};
+use super::common::*;
 
 use self::cocoa::appkit::NSBezelStyle;
 use self::cocoa::foundation::{NSString, NSRect, NSSize, NSPoint};
@@ -26,7 +24,7 @@ lazy_static! {
 const DEFAULT_PADDING: i32 = 6;
 const BASE_CLASS: &str = "NSButton";
 
-pub type Button = development::Member<development::Control<CocoaButton>>;
+pub type Button = Member<Control<CocoaButton>>;
 
 #[repr(C)]
 pub struct CocoaButton {
@@ -36,20 +34,20 @@ pub struct CocoaButton {
     h_right_clicked: Option<callbacks::Click>,
 }
 
-impl development::ButtonInner for CocoaButton {
-	fn with_label(label: &str) -> Box<controls::Button> {
-		use plygui_api::controls::{HasLayout, HasLabel};
+impl ButtonInner for CocoaButton {
+	fn with_label(label: &str) -> Box<Button> {
+		use plygui_api::controls::HasLabel;
 		
 		let mut b = Box::new(
-			development::Member::with_inner(
-				development::Control::with_inner(
+			Member::with_inner(
+				Control::with_inner(
 					CocoaButton {
 	                     base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
 	                     h_left_clicked: None,
 	                     h_right_clicked: None,
 	                 }, 
 					()
-				), development::MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
+				), MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut)
 			)
 		);
         let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
@@ -57,13 +55,12 @@ impl development::ButtonInner for CocoaButton {
         	(&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
 		    let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle]; 
         }       	    
-        b.set_layout_padding(layout::BoundarySize::AllTheSame(DEFAULT_PADDING).into());
         b.set_label(label);
         b
 	}
 }
 
-impl development::HasLabelInner for CocoaButton {
+impl HasLabelInner for CocoaButton {
 	fn label(&self) -> Cow<str> {
 		unsafe {
 			let label: id = msg_send![self.base.control, title];
@@ -71,7 +68,7 @@ impl development::HasLabelInner for CocoaButton {
 	        CStr::from_ptr(label as *const c_char).to_string_lossy()
 		}
     }
-    fn set_label(&mut self, _: &mut development::MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
 	    unsafe {
 			let title = NSString::alloc(cocoa::base::nil).init_str(label);
     		let () = msg_send![self.base.control, setTitle:title];
@@ -80,18 +77,17 @@ impl development::HasLabelInner for CocoaButton {
     }
 }
 
-impl development::ClickableInner for CocoaButton {
+impl ClickableInner for CocoaButton {
 	fn on_click(&mut self, cb: Option<callbacks::Click>) {
 		self.h_left_clicked = cb;
 	}
 }
 
-impl development::ControlInner for CocoaButton {
-	fn on_added_to_container(&mut self, base: &mut development::MemberControlBase, parent: &controls::Container, _x: i32, _y: i32) {
-		let (pw, ph) = parent.draw_area_size();
-        self.measure(base, pw, ph);
+impl ControlInner for CocoaButton {
+	fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
+		self.measure(member, control, pw, ph);
 	}
-    fn on_removed_from_container(&mut self, _: &mut development::MemberControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
     	unsafe { self.base.on_removed_from_container(); }
     }
     
@@ -109,24 +105,24 @@ impl development::ControlInner for CocoaButton {
     }
     
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut development::MemberControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+    fn fill_from_markup(&mut self, base: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
     	use plygui_api::markup::MEMBER_TYPE_BUTTON;
-    	use plygui_api::development::ClickableInner;
+    	use plygui_api::ClickableInner;
     	
     	fill_from_markup_base!(self, base, markup, registry, Button, [MEMBER_TYPE_BUTTON]);
     	fill_from_markup_label!(self, &mut base.member, markup);
-    	fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
+    	fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::Click]);
     }
 }
 
-impl development::MemberInner for CocoaButton {
+impl MemberInner for CocoaButton {
 	type Id = common::CocoaId;
 	
     fn size(&self) -> (u16, u16) {
     	self.base.measured_size
     }
     
-    fn on_set_visibility(&mut self, base: &mut development::MemberBase) {
+    fn on_set_visibility(&mut self, base: &mut MemberBase) {
     	self.base.on_set_visibility(base);
     }
     
@@ -135,30 +131,27 @@ impl development::MemberInner for CocoaButton {
     }
 }
 
-impl development::HasLayoutInner for CocoaButton {
-	fn on_layout_changed(&mut self, _: &mut development::MemberBase) {
+impl HasLayoutInner for CocoaButton {
+	fn on_layout_changed(&mut self, _: &mut MemberBase) {
 		self.base.invalidate();
 	}
 }
 
-impl development::Drawable for CocoaButton {
-	fn draw(&mut self, base: &mut development::MemberControlBase, coords: Option<(i32, i32)>) {
-		use plygui_api::development::ControlInner;
-		
-    	if coords.is_some() {
+impl Drawable for CocoaButton {
+	fn draw(&mut self, member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
+		if coords.is_some() {
     		self.base.coords = coords;
     	}
     	if let Some((x, y)) = self.base.coords {
-    		let (lm, tm, rm, bm) = base.control.layout.margin.into();
-	        let (_,ph) = self.parent_mut().unwrap().is_container_mut().unwrap().size();
+    		let (_,ph) = self.parent_mut().unwrap().is_container_mut().unwrap().size();
     		unsafe {
 	            let mut frame: NSRect = self.base.frame();
-	            frame.size = NSSize::new((self.base.measured_size.0 as i32 - lm - rm) as f64,
-	                                     (self.base.measured_size.1 as i32 - tm - bm) as f64);
-	            frame.origin = NSPoint::new((x + lm) as f64, (ph as i32 - y - self.base.measured_size.1 as i32 - tm) as f64);
+	            frame.size = NSSize::new((self.base.measured_size.0 as i32) as f64,
+	                                     (self.base.measured_size.1 as i32) as f64);
+	            frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
 	            let () = msg_send![self.base.control, setFrame: frame];
 	        }
-    		if let Some(ref mut cb) = base.member.handler_resize {
+    		if let Some(ref mut cb) = member.handler_resize {
 	            unsafe {
 	                let object: &Object = mem::transmute(self.base.control);
 	                let saved: *mut c_void = *object.get_ivar(common::IVAR);
@@ -168,33 +161,30 @@ impl development::Drawable for CocoaButton {
 	        }
     	}
     }
-    fn measure(&mut self, base: &mut development::MemberControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
     	use std::cmp::max;
     	
     	let old_size = self.base.measured_size;
-        let (lp, tp, rp, bp) = base.control.layout.padding.into();
-        let (lm, tm, rm, bm) = base.control.layout.margin.into();
-
-		self.base.measured_size = match base.member.visibility {
+        self.base.measured_size = match member.visibility {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size = (0, 0);
-                let w = match base.control.layout.width {
+                let w = match control.layout.width {
                     layout::Size::MatchParent => parent_width as i32,
                     layout::Size::Exact(w) => w as i32,
                     layout::Size::WrapContent => {
                         label_size = common::measure_nsstring(msg_send![self.base.control, title]);
-                        label_size.0 as i32 + lm + rm + lp + rp
+                        label_size.0 as i32 + DEFAULT_PADDING + DEFAULT_PADDING
                     } 
                 };
-                let h = match base.control.layout.height {
+                let h = match control.layout.height {
                     layout::Size::MatchParent => parent_height as i32,
                     layout::Size::Exact(h) => h as i32,
                     layout::Size::WrapContent => {
                         if label_size.1 < 1 {
                             label_size = common::measure_nsstring(msg_send![self.base.control, title]);
                         }
-                        label_size.1 as i32 + tm + bm + tp + bp
+                        label_size.1 as i32 + DEFAULT_PADDING + DEFAULT_PADDING
                     } 
                 };
                 (max(0, w) as u16, max(0, h) as u16)
@@ -202,7 +192,7 @@ impl development::Drawable for CocoaButton {
         };
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
-    fn invalidate(&mut self, _: &mut development::MemberControlBase) {
+    fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
     	self.base.invalidate();
     }
 }
