@@ -10,7 +10,7 @@ pub use self::cocoa::appkit::NSView;
 pub use objc::runtime::{Class, Object, Sel, BOOL, Ivar, class_copyIvarList, YES, NO};
 pub use objc::declare::ClassDecl;
 
-pub use plygui_api::{controls, types, ids, layout, callbacks};
+pub use plygui_api::{controls, types, ids, layout, callbacks, defaults, utils};
 pub use plygui_api::development::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
