@@ -1,5 +1,4 @@
 use super::common::*;
-use super::*;
 
 pub use std::os::raw::c_char;
 
@@ -7,8 +6,12 @@ const INNER_PADDING_H: i32 = 7; // TODO: WHY???
 const INNER_PADDING_V: i32 = 5; // TODO: WHY???
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", "NSBox", |_| {}) };
+    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", BASE_CLASS, |decl| {
+	    	decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+    	}) };
 }
+
+const BASE_CLASS: &str = "NSBox";
 
 pub type Frame = Member<Control<SingleContainer<CocoaFrame>>>;
 
@@ -172,7 +175,7 @@ impl MemberInner for CocoaFrame {
     type Id = common::CocoaId;
 
     fn size(&self) -> (u16, u16) {
-        self.base.measured_size
+        self.base.size()
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
@@ -262,5 +265,11 @@ impl Drawable for CocoaFrame {
 pub(crate) fn spawn() -> Box<controls::Control> {
     Frame::with_label("").into_control()
 }
-
+extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+    unsafe {
+        let sp = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
+        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        sp.call_on_resize(param.width as u16, param.height as u16)
+    }
+}
 impl_all_defaults!(Frame);

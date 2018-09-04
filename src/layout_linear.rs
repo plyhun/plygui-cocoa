@@ -1,9 +1,12 @@
 use super::common::*;
-use super::*;
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiLinearLayout", "NSView", |_| {}) };
+    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiLinearLayout", BASE_CLASS, |decl| {
+	    	decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+    	}) };
 }
+
+const BASE_CLASS: &str = "NSView";
 
 pub type LinearLayout = Member<Control<MultiContainer<CocoaLinearLayout>>>;
 
@@ -180,7 +183,7 @@ impl MemberInner for CocoaLinearLayout {
     type Id = common::CocoaId;
 
     fn size(&self) -> (u16, u16) {
-        self.base.measured_size
+        self.base.size()
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
@@ -279,6 +282,13 @@ impl Drawable for CocoaLinearLayout {
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
         self.base.invalidate();
+    }
+}
+extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+    unsafe {
+        let sp = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
+        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        sp.call_on_resize(param.width as u16, param.height as u16)
     }
 }
 

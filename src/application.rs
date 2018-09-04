@@ -1,5 +1,4 @@
 use super::common::*;
-use super::*;
 
 use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicyRegular};
 

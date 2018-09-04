@@ -1,5 +1,4 @@
 use super::common::*;
-use super::*;
 
 use self::cocoa::appkit::NSBezelStyle;
 use self::cocoa::base::id;
@@ -16,6 +15,7 @@ lazy_static! {
         common::register_window_class("PlyguiButton", BASE_CLASS, |decl| {
             decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, id));
             decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, id));
+            decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
     };
 }
@@ -119,7 +119,7 @@ impl MemberInner for CocoaButton {
     type Id = common::CocoaId;
 
     fn size(&self) -> (u16, u16) {
-        self.base.measured_size
+        self.base.size()
     }
 
     fn on_set_visibility(&mut self, base: &mut MemberBase) {
@@ -222,5 +222,11 @@ extern "C" fn button_right_click(this: &mut Object, _: Sel, param: id) {
         let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
     }
 }
-
+extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+    unsafe {
+        let sp = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
+        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        sp.call_on_resize(param.width as u16, param.height as u16)
+    }
+}
 impl_all_defaults!(Button);
