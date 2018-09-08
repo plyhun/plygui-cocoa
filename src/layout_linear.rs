@@ -1,9 +1,11 @@
 use super::common::*;
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiLinearLayout", BASE_CLASS, |decl| {
-	    	decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
-    	}) };
+    static ref WINDOW_CLASS: common::RefClass = unsafe {
+        common::register_window_class("PlyguiLinearLayout", BASE_CLASS, |decl| {
+            decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+        })
+    };
 }
 
 const BASE_CLASS: &str = "NSView";
@@ -45,15 +47,19 @@ impl MultiContainerInner for CocoaLinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, new: Box<controls::Control>) -> Option<Box<controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut new: Box<controls::Control>) -> Option<Box<controls::Control>> {
         let mut old = self.remove_child_from(base, index);
 
         unsafe {
             if let Some(ref mut old) = old {
+                old.on_removed_from_container(common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap());
                 let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview];
             }
             let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
+        let (w, h) = self.size();
+        new.on_added_to_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() }, w as i32, h as i32, w, h);
+        self.base.invalidate();
         self.children.insert(index, new);
 
         old
@@ -64,6 +70,7 @@ impl MultiContainerInner for CocoaLinearLayout {
         }
         let mut child = self.children.remove(index);
         child.on_removed_from_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() });
+        self.base.invalidate();
 
         Some(child)
     }
@@ -201,7 +208,7 @@ impl Drawable for CocoaLinearLayout {
             self.base.coords = coords;
         }
         if let Some((x, y)) = self.base.coords {
-            let (_, ph) = self.parent().unwrap().is_container().unwrap().size();
+            let (_, ph) = self.parent().unwrap().size();
             unsafe {
                 let mut frame: NSRect = msg_send![self.base.control, frame];
                 frame.size = NSSize::new((self.base.measured_size.0 as i32) as f64, (self.base.measured_size.1 as i32) as f64);

@@ -2,13 +2,15 @@ use super::common::*;
 
 pub use std::os::raw::c_char;
 
-const INNER_PADDING_H: i32 = 9; // TODO: WHY???
+const INNER_PADDING_H: i32 = 7; // TODO: WHY???
 const INNER_PADDING_V: i32 = 8; // TODO: WHY???
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", BASE_CLASS, |decl| {
-	    	decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
-    	}) };
+    static ref WINDOW_CLASS: common::RefClass = unsafe {
+        common::register_window_class("PlyguiFrame", BASE_CLASS, |decl| {
+            decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+        })
+    };
 }
 
 const BASE_CLASS: &str = "NSBox";
@@ -135,7 +137,13 @@ impl ControlInner for CocoaFrame {
                 let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id];
             }
             let (pw, ph) = self.base.measured_size;
-            child.on_added_to_container(frame2, 0, INNER_PADDING_V + self.label_padding.1 as i32, cmp::max(0, pw as i32 - INNER_PADDING_H - INNER_PADDING_H) as u16, cmp::max(0, ph as i32 - INNER_PADDING_V - INNER_PADDING_V) as u16);
+            child.on_added_to_container(
+                frame2,
+                0,
+                INNER_PADDING_V + self.label_padding.1 as i32,
+                cmp::max(0, pw as i32 - INNER_PADDING_H - INNER_PADDING_H) as u16,
+                cmp::max(0, ph as i32 - INNER_PADDING_V - INNER_PADDING_V) as u16,
+            );
         }
     }
     fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
@@ -199,11 +207,11 @@ impl Drawable for CocoaFrame {
             self.base.coords = coords;
         }
         if let Some((x, y)) = self.base.coords {
-            let (_, ph) = self.parent().unwrap().is_container().unwrap().size();
+            let (_, ph) = self.parent().unwrap().size();
             unsafe {
                 let mut frame: NSRect = self.base.frame();
                 frame.size = NSSize::new((self.base.measured_size.0 as i32) as f64, (self.base.measured_size.1 as i32) as f64);
-                frame.origin = NSPoint::new((x) as f64, (ph as i32 - (y + self.base.measured_size.1 as i32)) as f64);
+                frame.origin = NSPoint::new((x) as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
                 let () = msg_send![self.base.control, setFrame: frame];
             }
             if let Some(ref mut child) = self.child {

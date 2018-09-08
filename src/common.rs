@@ -66,9 +66,9 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
     pub fn size(&self) -> (u16, u16) {
         let frame = self.frame();
         if frame.size.width < 1.0 && frame.size.height < 1.0 {
-        	self.measured_size
+            self.measured_size
         } else {
-        	(frame.size.width as u16, frame.size.height as u16)
+            (frame.size.width as u16, frame.size.height as u16)
         }
     }
     pub fn frame(&self) -> NSRect {
@@ -242,7 +242,7 @@ where
 
     decl.add_ivar::<*mut c_void>(IVAR);
     decl.add_ivar::<*mut c_void>(IVAR_PARENT);
-    
+
     f(&mut decl);
 
     common::RefClass(decl.register())
