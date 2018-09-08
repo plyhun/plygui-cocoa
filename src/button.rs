@@ -84,6 +84,7 @@ impl ClickableInner for CocoaButton {
 impl ControlInner for CocoaButton {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
+        self.base.invalidate();
     }
     fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
         unsafe {

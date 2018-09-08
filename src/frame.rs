@@ -2,8 +2,8 @@ use super::common::*;
 
 pub use std::os::raw::c_char;
 
-const INNER_PADDING_H: i32 = 7; // TODO: WHY???
-const INNER_PADDING_V: i32 = 5; // TODO: WHY???
+const INNER_PADDING_H: i32 = 9; // TODO: WHY???
+const INNER_PADDING_V: i32 = 8; // TODO: WHY???
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe { common::register_window_class("PlyguiFrame", BASE_CLASS, |decl| {
@@ -135,7 +135,7 @@ impl ControlInner for CocoaFrame {
                 let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id];
             }
             let (pw, ph) = self.base.measured_size;
-            child.on_added_to_container(frame2, 0, INNER_PADDING_H + self.label_padding.1 as i32, pw, ph);
+            child.on_added_to_container(frame2, 0, INNER_PADDING_V + self.label_padding.1 as i32, cmp::max(0, pw as i32 - INNER_PADDING_H - INNER_PADDING_H) as u16, cmp::max(0, ph as i32 - INNER_PADDING_V - INNER_PADDING_V) as u16);
         }
     }
     fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
@@ -207,7 +207,7 @@ impl Drawable for CocoaFrame {
                 let () = msg_send![self.base.control, setFrame: frame];
             }
             if let Some(ref mut child) = self.child {
-                child.draw(Some((0, INNER_PADDING_H + self.label_padding.1 as i32)));
+                child.draw(Some((0, INNER_PADDING_V + self.label_padding.1 as i32)));
             }
         }
     }
@@ -269,7 +269,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
         let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_resize(param.width as u16, param.height as u16)
+        sp.call_on_resize(param.width as u16, param.height as u16);
     }
 }
 impl_all_defaults!(Frame);

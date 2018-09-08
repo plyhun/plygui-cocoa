@@ -38,21 +38,6 @@ impl CocoaSplitted {
             layout::Orientation::Vertical => unsafe { msg_send![self.base.control, setPosition:(self.base.measured_size.1 as f32 * self.splitter) ofDividerAtIndex:0] },
         };
     }
-    fn update_children_layout(&mut self) {
-        let orientation = self.layout_orientation();
-        let (first_size, second_size) = self.children_sizes();
-        let (width, height) = self.size();
-        for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
-            match orientation {
-                layout::Orientation::Horizontal => {
-                    child.measure(cmp::max(0, *size) as u16, cmp::max(0, height as i32) as u16);
-                }
-                layout::Orientation::Vertical => {
-                    child.measure(cmp::max(0, width as i32) as u16, cmp::max(0, *size) as u16);
-                }
-            }
-        }
-    }
 }
 
 impl SplittedInner for CocoaSplitted {
@@ -446,10 +431,29 @@ unsafe fn register_delegate() -> common::RefClass {
     common::RefClass(decl.register())
 }
 extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
-    unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
-        let size = sp.as_inner().as_inner().as_inner().size();
-		println!("{:?}", size);        
+	unsafe {
+		let sp = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
+        let subviews: cocoa_id = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, subviews];
+		let first: cocoa_id = msg_send![subviews, objectAtIndex:0];
+        let first: NSRect = msg_send![first, frame];
+        let size: NSRect = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, frame];
+		let o = sp.as_inner().as_inner().as_inner().layout_orientation();
+		let splitter = match o {
+			layout::Orientation::Horizontal => first.size.width / size.size.width,
+			layout::Orientation::Vertical => first.size.height / size.size.height,
+		} as f32;
+		if splitter.is_nan() {
+        	return;
+        }
+        let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
+	    let member = &mut *(sp.base_mut() as *mut MemberBase);
+	    let control = &mut *(sp.as_inner_mut().base_mut() as *mut ControlBase);
+	    if (old_splitter - splitter).abs() > 0.02 {
+	        let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
+	        sp.splitter = splitter;
+	        sp.measure(member, control, size.size.width as u16, size.size.height as u16);
+	        sp.draw(member, control, None);
+	    }
     }
 }
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {

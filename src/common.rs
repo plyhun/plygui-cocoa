@@ -103,8 +103,6 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
         self.invalidate();
     }
     pub fn invalidate(&mut self) {
-        use objc::runtime::YES;
-
         let parent_id = self.parent_cocoa_id();
         if let Some(parent_id) = parent_id {
             let mparent = unsafe { member_base_from_cocoa_id_mut(parent_id).unwrap().as_member_mut() };
