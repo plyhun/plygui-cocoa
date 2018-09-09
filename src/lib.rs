@@ -10,6 +10,7 @@ extern crate plygui_api;
 pub extern crate objc;
 pub extern crate cocoa;
 pub extern crate core_foundation;
+pub extern crate core_graphics;
 
 #[macro_use]
 pub mod common;
