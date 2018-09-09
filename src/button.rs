@@ -1,20 +1,14 @@
 use super::common::*;
 
 use self::cocoa::appkit::NSBezelStyle;
-use self::cocoa::base::id;
-use self::cocoa::foundation::{NSPoint, NSRect, NSSize, NSString};
-use objc::runtime::{Class, Object, Sel};
 
-use std::borrow::Cow;
-use std::ffi::CStr;
-use std::mem;
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         common::register_window_class("PlyguiButton", BASE_CLASS, |decl| {
-            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, id));
-            decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, id));
+            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id));
+            decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
     };
@@ -61,9 +55,9 @@ impl ButtonInner for CocoaButton {
 impl HasLabelInner for CocoaButton {
     fn label(&self) -> Cow<str> {
         unsafe {
-            let label: id = msg_send![self.base.control, title];
+            let label: cocoa_id = msg_send![self.base.control, title];
             let label: *const c_void = msg_send![label, UTF8String];
-            CStr::from_ptr(label as *const c_char).to_string_lossy()
+            ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
         }
     }
     fn set_label(&mut self, _: &mut MemberBase, label: &str) {
@@ -202,7 +196,7 @@ pub(crate) fn spawn() -> Box<controls::Control> {
     Button::with_label("").into_control()
 }
 
-extern "C" fn button_left_click(this: &mut Object, _: Sel, param: id) {
+extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) {
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
         let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
@@ -212,7 +206,7 @@ extern "C" fn button_left_click(this: &mut Object, _: Sel, param: id) {
         }
     }
 }
-extern "C" fn button_right_click(this: &mut Object, _: Sel, param: id) {
+extern "C" fn button_right_click(this: &mut Object, _: Sel, param: cocoa_id) {
     //println!("right!");
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
