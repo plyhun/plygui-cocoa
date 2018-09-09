@@ -5,7 +5,7 @@ pub use std::os::raw::c_void;
 pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str};
 
 pub use self::cocoa::appkit::NSView;
-pub use self::cocoa::base::{class, id as cocoa_id, nil};
+pub use self::cocoa::base::{id as cocoa_id, nil};
 pub use self::cocoa::foundation::{NSPoint, NSRange, NSRect, NSSize, NSString};
 pub use objc::declare::ClassDecl;
 pub use objc::runtime::{class_copyIvarList, Class, Ivar, Object, Sel, BOOL, NO, YES};
@@ -214,11 +214,11 @@ pub unsafe fn measure_string(text: &str) -> (u16, u16) {
 }
 
 pub unsafe fn measure_nsstring(title: cocoa_id) -> (u16, u16) {
-    let text_storage: cocoa_id = msg_send![class("NSTextStorage"), alloc];
+    let text_storage: cocoa_id = msg_send![class!(NSTextStorage), alloc];
     let text_storage: cocoa_id = msg_send![text_storage, initWithString: title];
-    let layout_manager: cocoa_id = msg_send![class("NSLayoutManager"), alloc];
+    let layout_manager: cocoa_id = msg_send![class!(NSLayoutManager), alloc];
     let layout_manager: cocoa_id = msg_send![layout_manager, init];
-    let text_container: cocoa_id = msg_send![class("NSTextContainer"), alloc];
+    let text_container: cocoa_id = msg_send![class!(NSTextContainer), alloc];
     let text_container: cocoa_id = msg_send![text_container, init];
 
     let () = msg_send![layout_manager, addTextContainer: text_container];

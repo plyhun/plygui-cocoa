@@ -7,9 +7,9 @@ extern crate lazy_static;
 extern crate plygui_api;
 
 #[macro_use]
-extern crate objc;
-extern crate cocoa;
-extern crate core_foundation;
+pub extern crate objc;
+pub extern crate cocoa;
+pub extern crate core_foundation;
 
 #[macro_use]
 pub mod common;
