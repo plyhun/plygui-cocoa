@@ -29,8 +29,8 @@ impl CocoaSplitted {
             layout::Orientation::Vertical => h,
         };
         (
-            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32 / 2)),
-            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32 / 2)),
+            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32) - 3),
+            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32) - 3),
         )
     }
     fn update_splitter(&mut self) {
@@ -422,21 +422,29 @@ extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
         let subviews: cocoa_id = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, subviews];
         let first: cocoa_id = msg_send![subviews, objectAtIndex:0];
         let first: NSRect = msg_send![first, frame];
+        let second: cocoa_id = msg_send![subviews, objectAtIndex:1];
+        let second: NSRect = msg_send![second, frame];
         let size: NSRect = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, frame];
         let o = sp.as_inner().as_inner().as_inner().layout_orientation();
-        let splitter = match o {
-            layout::Orientation::Horizontal => first.size.width / size.size.width,
-            layout::Orientation::Vertical => first.size.height / size.size.height,
+        let mut splitter_first = match o {
+            layout::Orientation::Horizontal => (first.size.width / size.size.width),
+            layout::Orientation::Vertical => (first.size.height / size.size.height),
         } as f32;
-        if splitter.is_nan() {
+        let splitter_second = match o {
+            layout::Orientation::Horizontal => (second.size.width / size.size.width),
+            layout::Orientation::Vertical => (second.size.height / size.size.height),
+        } as f32;
+        if splitter_first.is_nan() || splitter_second.is_nan() {
             return;
         }
+        let bias = (1.0 - (splitter_first + splitter_second)) / 2.0;
+        splitter_first += bias; 
         let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
         let member = &mut *(sp.base_mut() as *mut MemberBase);
         let control = &mut *(sp.as_inner_mut().base_mut() as *mut ControlBase);
-        if (old_splitter - splitter).abs() > 0.02 {
+        if (old_splitter - splitter_first).abs() > 0.001 {
             let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
-            sp.splitter = splitter;
+            sp.splitter = splitter_first;
             sp.measure(member, control, size.size.width as u16, size.size.height as u16);
             sp.draw(member, control, None);
         }
