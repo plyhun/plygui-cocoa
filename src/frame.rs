@@ -67,6 +67,15 @@ impl SingleContainerInner for CocoaFrame {
                 let child_id = child.native_id() as cocoa_id;
                 (&mut *child_id).set_ivar(common::IVAR_PARENT, self.base.control as *mut c_void);
                 let () = msg_send![self.base.control, addSubview: child_id];
+	            let frame2 = common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap();
+	            let (pw, ph) = self.base.measured_size;
+	            child.on_added_to_container(
+	                frame2,
+	                0,
+	                INNER_PADDING_V + self.label_padding.1 as i32,
+	                cmp::max(0, pw as i32 - INNER_PADDING_H - INNER_PADDING_H) as u16,
+	                cmp::max(0, ph as i32 - INNER_PADDING_V - INNER_PADDING_V) as u16,
+	            );
             }
         }
         if let Some(ref mut old) = old {
@@ -74,7 +83,9 @@ impl SingleContainerInner for CocoaFrame {
                 let child_id = old.native_id() as cocoa_id;
                 *(&mut *child_id).get_mut_ivar::<*mut c_void>(common::IVAR_PARENT) = ptr::null_mut();
                 let () = msg_send![child_id, removeFromSuperview];
-            }
+                let frame2 = common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap();
+		        old.on_removed_from_container(frame2);
+		    }
         }
         old
     }
