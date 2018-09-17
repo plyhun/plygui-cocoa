@@ -29,8 +29,8 @@ impl CocoaSplitted {
             layout::Orientation::Vertical => h,
         };
         (
-            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32) - 3),
-            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32) - 3),
+            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32)),
+            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32)),
         )
     }
     fn update_splitter(&mut self) {
@@ -123,7 +123,7 @@ impl MultiContainerInner for CocoaSplitted {
             },
             _ => return None,
         }
-
+	
         Some(child)
     }
     fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<controls::Control>> {
@@ -262,11 +262,11 @@ impl ControlInner for CocoaSplitted {
     }
 
     #[cfg(feature = "markup")]
-    fn fill_from_markup(&mut self, base: &mut MemberBase, control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-        use plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT;
+    fn fill_from_markup(&mut self, base: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
+        use plygui_api::markup::MEMBER_TYPE_SPLITTED;
 
-        fill_from_markup_base!(self, base, markup, registry, Splitted, [MEMBER_TYPE_LINEAR_LAYOUT]);
-        fill_from_markup_children!(self, &mut base.member, markup, registry);
+        fill_from_markup_base!(self, base, markup, registry, Splitted, [MEMBER_TYPE_SPLITTED]);
+        fill_from_markup_children!(self, base, markup, registry);
     }
 }
 
@@ -295,20 +295,18 @@ impl MemberInner for CocoaSplitted {
 
 impl Drawable for CocoaSplitted {
     fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            self.base.coords = coords;
-        }
-        if let Some((x, y)) = self.base.coords {
-            let (_, ph) = self.parent().unwrap().is_container().unwrap().size();
-            unsafe {
-                let mut frame: NSRect = msg_send![self.base.control, frame];
-                frame.size = NSSize::new((self.base.measured_size.0 as i32) as f64, (self.base.measured_size.1 as i32) as f64);
-                frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.base.measured_size.1 as i32) as f64);
-                let () = msg_send![self.base.control, setFrame: frame];
-            }
-            for child in [self.first.as_mut(), self.second.as_mut()].iter_mut() {
-                child.draw(Some((0, 0)));
-            }
+        self.base.draw(coords);
+        let splitter: f32 = unsafe {msg_send![self.base.control, dividerThickness]};
+        let o = self.layout_orientation();
+        let (first, _) = self.children_sizes();
+        self.first.draw(Some((0, 0)));
+        match o {
+        	layout::Orientation::Horizontal => {
+	        	self.second.draw(Some((first as i32 + splitter as i32, 0)));
+        	},
+        	layout::Orientation::Vertical => {
+	        	self.second.draw(Some((0, first as i32 + splitter as i32)));
+        	},
         }
     }
     fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -370,19 +368,6 @@ impl Drawable for CocoaSplitted {
                 (w, h)
             }
         };
-        let (first, second) = self.children_sizes();
-        match orientation {
-            layout::Orientation::Horizontal => {
-                let size = cmp::max(0, parent_height as i32) as u16;
-                self.first.measure(first, size);
-                self.second.measure(second, size);
-            }
-            layout::Orientation::Vertical => {
-                let size = cmp::max(0, parent_width as i32) as u16;
-                self.first.measure(size, first);
-                self.second.measure(size, second);
-            }
-        }
         (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
@@ -442,7 +427,7 @@ extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
         let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
         let member = &mut *(sp.base_mut() as *mut MemberBase);
         let control = &mut *(sp.as_inner_mut().base_mut() as *mut ControlBase);
-        if (old_splitter - splitter_first).abs() > 0.001 {
+        if (old_splitter - splitter_first) != 0.0 {
             let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
             sp.splitter = splitter_first;
             sp.measure(member, control, size.size.width as u16, size.size.height as u16);

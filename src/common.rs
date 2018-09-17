@@ -102,6 +102,20 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
         }
         self.invalidate();
     }
+    pub fn draw(&mut self, coords: Option<(i32, i32)>) {
+        if coords.is_some() {
+            self.coords = coords;
+        }
+        if let Some((x, y)) = self.coords {
+            let (_, ph) = self.parent().unwrap().size();
+            unsafe {
+                let mut frame: NSRect = self.frame();
+                frame.size = NSSize::new((self.measured_size.0 as i32) as f64, (self.measured_size.1 as i32) as f64);
+                frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.measured_size.1 as i32) as f64);
+                let () = msg_send![self.control, setFrame: frame];
+            }
+        }
+    }
     pub fn invalidate(&mut self) {
         let parent_id = self.parent_cocoa_id();
         if let Some(parent_id) = parent_id {
@@ -115,7 +129,7 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 let mparent_type = mparent.as_any().get_type_id();
                 if let Some(control) = mparent.is_control_mut() {
                     control.invalidate();
-                } else if mparent_type == any::TypeId::of::<Window>() {
+                } else if mparent_type == any::TypeId::of::<super::window::Window>() {
                     this.draw(None);
                     unsafe {
                         let () = msg_send![parent_id, setNeedsDisplay: YES];

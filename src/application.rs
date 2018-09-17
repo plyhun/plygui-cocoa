@@ -55,7 +55,7 @@ impl ApplicationInner for CocoaApplication {
         use plygui_api::controls::{Container, Member};
 
         for window in self.windows.as_mut_slice() {
-            if let Some(window) = unsafe { member_from_cocoa_id_mut::<Window>(*window) } {
+            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
                 if window.id() == id {
                     return Some(window);
                 } else {
@@ -69,7 +69,7 @@ impl ApplicationInner for CocoaApplication {
         use plygui_api::controls::{Container, Member};
 
         for window in self.windows.as_slice() {
-            if let Some(window) = unsafe { member_from_cocoa_id::<Window>(*window) } {
+            if let Some(window) = unsafe { member_from_cocoa_id::<super::window::Window>(*window) } {
                 if window.id() == id {
                     return Some(window);
                 } else {
