@@ -9,7 +9,7 @@ lazy_static! {
     static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
 }
 
-pub type Window = Member<SingleContainer<CocoaWindow>>;
+pub type Window = Member<SingleContainer<::plygui_api::development::Window<CocoaWindow>>>;
 
 #[repr(C)]
 pub struct CocoaWindow {
@@ -66,17 +66,23 @@ impl WindowInner for CocoaWindow {
             let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(Member::with_inner(
-                SingleContainer::with_inner(CocoaWindow { window: window, container: view, child: None }, ()),
+                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None }, ()), ()),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            (&mut *window.as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            let () = msg_send![window.as_inner_mut().as_inner_mut().window, setDelegate: delegate];
+            (&mut *window.as_inner_mut().as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
+            let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, setDelegate: delegate];
 
             window
         }
+    }
+    fn on_frame(&mut self, cb: callbacks::Frame) {
+        let _ = unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
+    }
+    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::Frame> {
+        unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
     }
 }
 
@@ -217,7 +223,7 @@ fn window_redraw(this: &mut Object) {
         let window = common::member_from_cocoa_id_mut::<Window>(this).unwrap();
         let size = window.size();
 
-        window.as_inner_mut().as_inner_mut().redraw();
+        window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
 
         if let Some(ref mut cb) = window.base_mut().handler_resize {
             use plygui_api::controls::SingleContainer;
