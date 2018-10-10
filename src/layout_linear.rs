@@ -2,7 +2,7 @@ use super::common::*;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
-        common::register_window_class("PlyguiLinearLayout", BASE_CLASS, |decl| {
+        register_window_class("PlyguiLinearLayout", BASE_CLASS, |decl| {
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
     };
@@ -52,13 +52,17 @@ impl MultiContainerInner for CocoaLinearLayout {
 
         unsafe {
             if let Some(ref mut old) = old {
-                old.on_removed_from_container(common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap());
+                if self.base.root().is_some() {
+                    old.on_removed_from_container(common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap());
+                }
                 let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview];
             }
             let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
         let (w, h) = self.size();
-        new.on_added_to_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() }, w as i32, h as i32, w, h);
+        if self.base.root().is_some() {
+            new.on_added_to_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() }, w as i32, h as i32, w, h);
+        }
         self.base.invalidate();
         self.children.insert(index, new);
 
@@ -69,7 +73,9 @@ impl MultiContainerInner for CocoaLinearLayout {
             return None;
         }
         let mut child = self.children.remove(index);
-        child.on_removed_from_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() });
+        if self.base.root().is_some() {
+            child.on_removed_from_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() });
+        }
         self.base.invalidate();
 
         Some(child)

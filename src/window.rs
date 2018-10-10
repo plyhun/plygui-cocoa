@@ -5,7 +5,7 @@ use self::cocoa::appkit::{NSBackingStoreBuffered, NSWindow, NSWindowStyleMask};
 const BASE_CLASS: &str = "NSWindow";
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class() };
+    static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class("PlyguiWindow", BASE_CLASS, |_| {}) };
     static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
 }
 
@@ -187,15 +187,6 @@ impl Drop for CocoaWindow {
             let () = msg_send![self.window, dealloc];
         }
     }
-}
-
-unsafe fn register_window_class() -> common::RefClass {
-    let superclass = Class::get(BASE_CLASS).unwrap();
-    let mut decl = ClassDecl::new("PlyguiWindow", superclass).unwrap();
-
-    decl.add_ivar::<*mut c_void>(common::IVAR);
-
-    common::RefClass(decl.register())
 }
 
 unsafe fn register_delegate() -> common::RefClass {

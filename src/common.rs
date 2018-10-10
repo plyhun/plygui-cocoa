@@ -2,7 +2,7 @@ pub use super::*;
 
 pub use std::borrow::Cow;
 pub use std::os::raw::c_void;
-pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str};
+pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
 pub use self::cocoa::appkit::NSView;
 pub use self::cocoa::base::{id as cocoa_id, nil};

@@ -6,7 +6,7 @@ use std::os::raw::c_char;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
-        common::register_window_class("PlyguiButton", BASE_CLASS, |decl| {
+        register_window_class("PlyguiButton", BASE_CLASS, |decl| {
             decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));

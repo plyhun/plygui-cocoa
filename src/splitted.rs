@@ -2,7 +2,7 @@ use super::common::*;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
-        common::register_window_class("PlyguiSplitted", BASE_CLASS, |decl| {
+        register_window_class("PlyguiSplitted", BASE_CLASS, |decl| {
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
     };
@@ -107,18 +107,26 @@ impl MultiContainerInner for CocoaSplitted {
                 let self2 = utils::base_to_impl_mut::<Splitted>(base);
                 let sizes = self.first.size();
                 let () = msg_send![self.first.native_id() as cocoa_id, removeFromSuperview];
-                self.first.on_removed_from_container(self2);
+                if self.base.root().is_some() {
+                    self.first.on_removed_from_container(self2);
+                }
                 let () = msg_send![child.native_id() as cocoa_id, addSubview: child.native_id() as cocoa_id];
-                child.on_added_to_container(self2, 0, 0, sizes.0, sizes.1);
+                if self.base.root().is_some() {
+                    child.on_added_to_container(self2, 0, 0, sizes.0, sizes.1);
+                }
                 mem::swap(&mut self.first, &mut child);
             },
             1 => unsafe {
                 let self2 = utils::base_to_impl_mut::<Splitted>(base);
                 let sizes = self.second.size();
                 let () = msg_send![self.second.native_id() as cocoa_id, removeFromSuperview];
-                self.second.on_removed_from_container(self2);
+                if self.base.root().is_some() {
+                    self.second.on_removed_from_container(self2);
+                }
                 let () = msg_send![child.native_id() as cocoa_id, addSubview: child.native_id() as cocoa_id];
-                child.on_added_to_container(self2, 0, 0, sizes.0, sizes.1);
+                if self.base.root().is_some() {
+                    child.on_added_to_container(self2, 0, 0, sizes.0, sizes.1);
+                }
                 mem::swap(&mut self.second, &mut child);
             },
             _ => return None,
