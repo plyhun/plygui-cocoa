@@ -13,6 +13,7 @@ lazy_static! {
     static ref WINDOW_CLASS: RefClass = unsafe { register_window_class("PlyguiApplication", BASE_CLASS, |decl| {
         decl.add_method(sel!(run), application_run as extern "C" fn(&mut Object, Sel));
         decl.add_method(sel!(terminate:), application_terminate as extern "C" fn(&mut Object, Sel, cocoa_id));
+        decl.add_method(sel!(stop:), application_stop as extern "C" fn(&mut Object, Sel, cocoa_id));
         decl.add_method(sel!(isRunning:), application_is_running as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     }) };
     static ref DELEGATE: RefClass = unsafe { register_delegate() };
@@ -123,23 +124,25 @@ extern "C" fn application_should_running_after_last_window_closed(_: &Object, _:
 extern "C" fn application_run(this: &mut Object, _: Sel) {
     let mut frame_callbacks;
     unsafe {
+        let app: &mut Application = cast_cocoa_id_to_ptr(this).map(|ptr| mem::transmute(ptr)).unwrap();
+        app.as_inner_mut().running = true;
+        
         let default_center: cocoa_id = msg_send![class!(NSNotificationCenter), defaultCenter];
         let () = msg_send![default_center, postNotificationName:NSApplicationWillFinishLaunchingNotification object:(this as cocoa_id)];
         let () = msg_send![default_center, postNotificationName:NSApplicationDidFinishLaunchingNotification object:(this as cocoa_id)];
 
-        while {
+        while app.as_inner_mut().running {
             let distant_future: cocoa_id = msg_send![class!(NSDate), distantFuture];
             let event: cocoa_id = msg_send![this,
 					nextEventMatchingMask:NSEventMask::NSAnyEventMask
 					untilDate: distant_future
 					inMode:NSDefaultRunLoopMode
 					dequeue:YES];
-
-            let () = msg_send![this, sendEvent: event];
+            if !event.is_null() {
+                let () = msg_send![this, sendEvent: event];
+            }
             let () = msg_send![this, updateWindows];
             {
-                let app: &mut Application = cast_cocoa_id_to_ptr(this).map(|ptr| mem::transmute(ptr)).unwrap();
-                app.as_inner_mut().running = true;
                 for window_id in app.as_inner_mut().windows.as_mut_slice() {
                     let window: &mut window::Window = cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute(ptr)).unwrap();
                     frame_callbacks = 0;
@@ -159,9 +162,9 @@ extern "C" fn application_run(this: &mut Object, _: Sel) {
                         }
                     }
                 }
-                app.as_inner_mut().running
             }
         } {}
+        println!("Exit");
     }
 }
 extern "C" fn application_is_running(this: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
@@ -169,9 +172,19 @@ extern "C" fn application_is_running(this: &mut Object, _: Sel, _: cocoa_id) -> 
     if app.as_inner_mut().running { YES } else { NO }
 }
 extern "C" fn application_terminate(this: &mut Object, _: Sel, _: cocoa_id) {
+    println!("terminate");
     {
         let app: &mut Application = unsafe { cast_cocoa_id_to_ptr(this).map(|ptr| mem::transmute(ptr)).unwrap() };
         app.as_inner_mut().running = false;
     }
     unsafe { let () = msg_send![super(this, Class::get(BASE_CLASS).unwrap()), terminate]; }
 }
+extern "C" fn application_stop(this: &mut Object, _: Sel, _: cocoa_id) {
+    println!("stop");
+    {
+        let app: &mut Application = unsafe { cast_cocoa_id_to_ptr(this).map(|ptr| mem::transmute(ptr)).unwrap() };
+        app.as_inner_mut().running = false;
+    }
+    unsafe { let () = msg_send![super(this, Class::get(BASE_CLASS).unwrap()), stop]; }
+}
+

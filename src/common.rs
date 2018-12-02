@@ -39,6 +39,7 @@ impl NativeId for CocoaId {}
 
 pub const IVAR: &str = "plyguiIvar";
 pub const IVAR_PARENT: &str = "plyguiIvarParent";
+pub const DEFAULT_PADDING: i32 = 6;
 
 #[repr(C)]
 pub struct CocoaControlBase<T: controls::Control + Sized + 'static> {
