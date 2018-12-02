@@ -52,7 +52,7 @@ impl ButtonInner for CocoaButton {
 }
 
 impl HasLabelInner for CocoaButton {
-    fn label(&self) -> Cow<str> {
+    fn label(&self) -> Cow<'_, str> {
         unsafe {
             let label: cocoa_id = msg_send![self.base.control, title];
             let label: *const c_void = msg_send![label, UTF8String];
@@ -75,27 +75,27 @@ impl ClickableInner for CocoaButton {
 }
 
 impl ControlInner for CocoaButton {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         self.base.invalidate();
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         unsafe {
             self.base.on_removed_from_container();
         }
         self.base.invalidate();
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut()
     }
 
@@ -170,7 +170,7 @@ impl Drawable for CocoaButton {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Button::with_label("").into_control()
 }
 

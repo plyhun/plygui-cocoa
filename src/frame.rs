@@ -21,7 +21,7 @@ pub type Frame = Member<Control<SingleContainer<CocoaFrame>>>;
 pub struct CocoaFrame {
     base: common::CocoaControlBase<Frame>,
     label_padding: (i32, i32),
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 impl FrameInner for CocoaFrame {
@@ -59,7 +59,7 @@ impl CocoaFrame {
 }
 
 impl SingleContainerInner for CocoaFrame {
-    fn set_child(&mut self, _: &mut MemberBase, child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, _: &mut MemberBase, child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.child.take();
         self.child = child;
         if let Some(ref mut child) = self.child {
@@ -93,10 +93,10 @@ impl SingleContainerInner for CocoaFrame {
         }
         old
     }
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
         } else {
@@ -106,7 +106,7 @@ impl SingleContainerInner for CocoaFrame {
 }
 
 impl ContainerInner for CocoaFrame {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if child.as_member().id() == id {
                 Some(child.as_mut())
@@ -119,7 +119,7 @@ impl ContainerInner for CocoaFrame {
             None
         }
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if child.as_member().id() == id {
                 Some(child.as_ref())
@@ -135,7 +135,7 @@ impl ContainerInner for CocoaFrame {
 }
 
 impl HasLabelInner for CocoaFrame {
-    fn label(&self) -> Cow<str> {
+    fn label(&self) -> Cow<'_, str> {
         unsafe {
             let label: cocoa_id = msg_send![self.base.control, getTitle];
             let label: *const c_void = msg_send![label, UTF8String];
@@ -153,7 +153,7 @@ impl HasLabelInner for CocoaFrame {
 }
 
 impl ControlInner for CocoaFrame {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
 
         if let Some(ref mut child) = self.child {
@@ -171,7 +171,7 @@ impl ControlInner for CocoaFrame {
             );
         }
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         let frame2 = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap() };
         if let Some(ref mut child) = self.child {
             child.on_removed_from_container(frame2);
@@ -181,16 +181,16 @@ impl ControlInner for CocoaFrame {
         }
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut()
     }
 
@@ -284,7 +284,7 @@ impl Drawable for CocoaFrame {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Frame::with_label("").into_control()
 }
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {

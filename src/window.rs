@@ -16,7 +16,7 @@ pub struct CocoaWindow {
     pub(crate) window: cocoa_id,
     pub(crate) container: cocoa_id,
 
-    child: Option<Box<controls::Control>>,
+    child: Option<Box<dyn controls::Control>>,
 }
 
 impl CocoaWindow {
@@ -87,7 +87,7 @@ impl WindowInner for CocoaWindow {
 }
 
 impl HasLabelInner for CocoaWindow {
-    fn label(&self) -> ::std::borrow::Cow<str> {
+    fn label(&self) -> ::std::borrow::Cow<'_, str> {
         unsafe {
             let title: cocoa_id = msg_send![self.window, title];
             let title = msg_send![title, UTF8String];
@@ -103,7 +103,7 @@ impl HasLabelInner for CocoaWindow {
 }
 
 impl SingleContainerInner for CocoaWindow {
-    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<controls::Control>>) -> Option<Box<controls::Control>> {
+    fn set_child(&mut self, _: &mut MemberBase, mut child: Option<Box<dyn controls::Control>>) -> Option<Box<dyn controls::Control>> {
         use plygui_api::controls::SingleContainer;
 
         let mut old = self.child.take();
@@ -126,10 +126,10 @@ impl SingleContainerInner for CocoaWindow {
 
         old
     }
-    fn child(&self) -> Option<&controls::Control> {
+    fn child(&self) -> Option<&dyn controls::Control> {
         self.child.as_ref().map(|c| c.as_ref())
     }
-    fn child_mut(&mut self) -> Option<&mut controls::Control> {
+    fn child_mut(&mut self) -> Option<&mut dyn controls::Control> {
         //self.child.as_mut().map(|c|c.as_mut()) // WTF ??
         if let Some(child) = self.child.as_mut() {
             Some(child.as_mut())
@@ -140,7 +140,7 @@ impl SingleContainerInner for CocoaWindow {
 }
 
 impl ContainerInner for CocoaWindow {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
                 return c.find_control_by_id_mut(id);
@@ -148,7 +148,7 @@ impl ContainerInner for CocoaWindow {
         }
         None
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
                 return c.find_control_by_id(id);
@@ -219,7 +219,7 @@ fn window_redraw(this: &mut Object) {
         if let Some(ref mut cb) = window.base_mut().handler_resize {
             use plygui_api::controls::SingleContainer;
 
-            let mut w2 = common::member_from_cocoa_id_mut::<Window>(this).unwrap();
+            let w2 = common::member_from_cocoa_id_mut::<Window>(this).unwrap();
             (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), size.0, size.1);
         }
     }

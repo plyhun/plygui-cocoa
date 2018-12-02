@@ -81,16 +81,16 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
     pub fn parent_cocoa_id(&self) -> Option<cocoa_id> {
         unsafe { parent_cocoa_id(self.control, false) }
     }
-    pub fn parent(&self) -> Option<&controls::Member> {
+    pub fn parent(&self) -> Option<&dyn controls::Member> {
         unsafe { parent_cocoa_id(self.control, false).and_then(|id| member_base_from_cocoa_id(id).map(|m| m.as_member())) }
     }
-    pub fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    pub fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         unsafe { parent_cocoa_id(self.control, false).and_then(|id| member_base_from_cocoa_id_mut(id).map(|m| m.as_member_mut())) }
     }
-    pub fn root(&self) -> Option<&controls::Member> {
+    pub fn root(&self) -> Option<&dyn controls::Member> {
         unsafe { parent_cocoa_id(self.control, true).and_then(|id| member_base_from_cocoa_id(id).map(|m| m.as_member())) }
     }
-    pub fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    pub fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         unsafe { parent_cocoa_id(self.control, true).and_then(|id| member_base_from_cocoa_id_mut(id).map(|m| m.as_member_mut())) }
     }
     pub fn on_set_visibility(&mut self, base: &mut MemberBase) {

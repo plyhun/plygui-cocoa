@@ -8,9 +8,9 @@ extern crate plygui_api;
 
 #[macro_use]
 pub extern crate objc;
-pub extern crate cocoa;
-pub extern crate core_foundation;
-pub extern crate core_graphics;
+pub use cocoa;
+pub use core_foundation;
+pub use core_graphics;
 
 #[macro_use]
 pub mod common;
@@ -40,12 +40,12 @@ pub mod prelude {
 	pub use plygui_api::utils; 
 	
 	pub mod imp {
-		pub use ::application::Application;
-		pub use ::window::Window;
-		pub use ::button::Button;
-		pub use ::layout_linear::LinearLayout;
-		pub use ::frame::Frame;
-		pub use ::splitted::Splitted;
-		pub use ::text::Text;
+		pub use crate::application::Application;
+		pub use crate::window::Window;
+		pub use crate::button::Button;
+		pub use crate::layout_linear::LinearLayout;
+		pub use crate::frame::Frame;
+		pub use crate::splitted::Splitted;
+		pub use crate::text::Text;
 	}
 }

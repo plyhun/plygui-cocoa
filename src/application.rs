@@ -51,7 +51,7 @@ impl ApplicationInner for CocoaApplication {
             app
         }
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<controls::Window> {
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
         use plygui_api::controls::Member;
 
         let w = window::CocoaWindow::with_params(title, size, menu);
@@ -60,13 +60,13 @@ impl ApplicationInner for CocoaApplication {
         }
         w
     }
-    fn name(&self) -> ::std::borrow::Cow<str> {
+    fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())
     }
     fn start(&mut self) {
         unsafe { self.app.run() };
     }
-    fn find_member_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Member> {
+    fn find_member_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Member> {
         use plygui_api::controls::{Container, Member};
 
         for window in self.windows.as_mut_slice() {
@@ -80,7 +80,7 @@ impl ApplicationInner for CocoaApplication {
         }
         None
     }
-    fn find_member_by_id(&self, id: ids::Id) -> Option<&controls::Member> {
+    fn find_member_by_id(&self, id: ids::Id) -> Option<&dyn controls::Member> {
         use plygui_api::controls::{Container, Member};
 
         for window in self.windows.as_slice() {

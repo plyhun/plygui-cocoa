@@ -16,7 +16,7 @@ pub type LinearLayout = Member<Control<MultiContainer<CocoaLinearLayout>>>;
 pub struct CocoaLinearLayout {
     base: common::CocoaControlBase<LinearLayout>,
     orientation: layout::Orientation,
-    children: Vec<Box<controls::Control>>,
+    children: Vec<Box<dyn controls::Control>>,
 }
 
 impl LinearLayoutInner for CocoaLinearLayout {
@@ -47,7 +47,7 @@ impl MultiContainerInner for CocoaLinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut new: Box<controls::Control>) -> Option<Box<controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.remove_child_from(base, index);
 
         unsafe {
@@ -68,7 +68,7 @@ impl MultiContainerInner for CocoaLinearLayout {
 
         old
     }
-    fn remove_child_from(&mut self, _: &mut MemberBase, index: usize) -> Option<Box<controls::Control>> {
+    fn remove_child_from(&mut self, _: &mut MemberBase, index: usize) -> Option<Box<dyn controls::Control>> {
         if index >= self.children.len() {
             return None;
         }
@@ -80,10 +80,10 @@ impl MultiContainerInner for CocoaLinearLayout {
 
         Some(child)
     }
-    fn child_at(&self, index: usize) -> Option<&controls::Control> {
+    fn child_at(&self, index: usize) -> Option<&dyn controls::Control> {
         self.children.get(index).map(|c| c.as_ref())
     }
-    fn child_at_mut(&mut self, index: usize) -> Option<&mut controls::Control> {
+    fn child_at_mut(&mut self, index: usize) -> Option<&mut dyn controls::Control> {
         if let Some(c) = self.children.get_mut(index) {
             Some(c.as_mut())
         } else {
@@ -93,7 +93,7 @@ impl MultiContainerInner for CocoaLinearLayout {
 }
 
 impl ContainerInner for CocoaLinearLayout {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
         for child in self.children.as_mut_slice() {
             if child.id() == id {
                 return Some(child.as_mut());
@@ -107,7 +107,7 @@ impl ContainerInner for CocoaLinearLayout {
         }
         None
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
         for child in self.children.as_slice() {
             if child.id() == id {
                 return Some(child.as_ref());
@@ -136,7 +136,7 @@ impl HasOrientationInner for CocoaLinearLayout {
 }
 
 impl ControlInner for CocoaLinearLayout {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         let orientation = self.orientation;
         let mut x = x;
@@ -154,7 +154,7 @@ impl ControlInner for CocoaLinearLayout {
             }
         }
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         let ll2: &LinearLayout = unsafe { common::member_from_cocoa_id(self.base.control).unwrap() };
         for ref mut child in self.children.as_mut_slice() {
             child.on_removed_from_container(ll2);
@@ -164,16 +164,16 @@ impl ControlInner for CocoaLinearLayout {
         }
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut()
     }
 
@@ -214,7 +214,7 @@ impl Drawable for CocoaLinearLayout {
         let mut x = 0;
         let mut y = 0;
 
-        for mut child in self.children.as_mut_slice() {
+        for child in self.children.as_mut_slice() {
             let child_size = child.size();
             child.draw(Some((x, y)));
             match self.orientation {
@@ -294,7 +294,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
 }
 
 #[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
+pub(crate) fn spawn() -> Box<dyn controls::Control> {
     LinearLayout::with_orientation(layout::Orientation::Vertical).into_control()
 }
 

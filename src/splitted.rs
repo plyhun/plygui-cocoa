@@ -16,8 +16,8 @@ const BASE_CLASS: &str = "NSSplitView";
 pub struct CocoaSplitted {
     base: common::CocoaControlBase<Splitted>,
     splitter: f32,
-    first: Box<controls::Control>,
-    second: Box<controls::Control>,
+    first: Box<dyn controls::Control>,
+    second: Box<dyn controls::Control>,
 }
 
 impl CocoaSplitted {
@@ -84,16 +84,16 @@ impl SplittedInner for CocoaSplitted {
     fn splitter(&self) -> f32 {
         self.splitter
     }
-    fn first(&self) -> &controls::Control {
+    fn first(&self) -> &dyn controls::Control {
         self.first.as_ref()
     }
-    fn second(&self) -> &controls::Control {
+    fn second(&self) -> &dyn controls::Control {
         self.second.as_ref()
     }
-    fn first_mut(&mut self) -> &mut controls::Control {
+    fn first_mut(&mut self) -> &mut dyn controls::Control {
         self.first.as_mut()
     }
-    fn second_mut(&mut self) -> &mut controls::Control {
+    fn second_mut(&mut self) -> &mut dyn controls::Control {
         self.second.as_mut()
     }
 }
@@ -101,7 +101,7 @@ impl MultiContainerInner for CocoaSplitted {
     fn len(&self) -> usize {
         2
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut child: Box<controls::Control>) -> Option<Box<controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut child: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         match index {
             0 => unsafe {
                 let self2 = utils::base_to_impl_mut::<Splitted>(base);
@@ -134,17 +134,17 @@ impl MultiContainerInner for CocoaSplitted {
 	
         Some(child)
     }
-    fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<controls::Control>> {
+    fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<dyn controls::Control>> {
         None
     }
-    fn child_at(&self, index: usize) -> Option<&controls::Control> {
+    fn child_at(&self, index: usize) -> Option<&dyn controls::Control> {
         match index {
             0 => Some(self.first()),
             1 => Some(self.second()),
             _ => None,
         }
     }
-    fn child_at_mut(&mut self, index: usize) -> Option<&mut controls::Control> {
+    fn child_at_mut(&mut self, index: usize) -> Option<&mut dyn controls::Control> {
         match index {
             0 => Some(self.first_mut()),
             1 => Some(self.second_mut()),
@@ -154,7 +154,7 @@ impl MultiContainerInner for CocoaSplitted {
 }
 
 impl ContainerInner for CocoaSplitted {
-    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut controls::Control> {
+    fn find_control_by_id_mut(&mut self, id_: ids::Id) -> Option<&mut dyn controls::Control> {
         if self.first().as_member().id() == id_ {
             return Some(self.first_mut());
         }
@@ -178,7 +178,7 @@ impl ContainerInner for CocoaSplitted {
 
         None
     }
-    fn find_control_by_id(&self, id_: ids::Id) -> Option<&controls::Control> {
+    fn find_control_by_id(&self, id_: ids::Id) -> Option<&dyn controls::Control> {
         if self.first().as_member().id() == id_ {
             return Some(self.first());
         }
@@ -218,7 +218,7 @@ impl HasOrientationInner for CocoaSplitted {
 }
 
 impl ControlInner for CocoaSplitted {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _: i32, _: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _: i32, _: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
         let (first_size, second_size) = self.children_sizes();
@@ -247,7 +247,7 @@ impl ControlInner for CocoaSplitted {
             }
         }
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         let self2: &Splitted = unsafe { common::member_from_cocoa_id(self.base.control).unwrap() };
         self.first.on_removed_from_container(self2);
         self.second.on_removed_from_container(self2);
@@ -256,16 +256,16 @@ impl ControlInner for CocoaSplitted {
         }
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut()
     }
 
