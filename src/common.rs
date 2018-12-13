@@ -260,8 +260,18 @@ where
 
     decl.add_ivar::<*mut c_void>(IVAR);
     decl.add_ivar::<*mut c_void>(IVAR_PARENT);
+    
+    decl.add_method(sel!(translatesAutoresizingMaskIntoConstraints:), class_autoresizing as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
+    decl.add_method(sel!(requiresConstraintBasedLayout:), class_constraint_layout as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
 
     f(&mut decl);
 
     common::RefClass(decl.register())
+}
+
+extern "C" fn class_autoresizing(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
+    NO
+}
+extern "C" fn class_constraint_layout(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
+    YES
 }
