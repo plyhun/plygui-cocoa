@@ -8,6 +8,7 @@ extern crate plygui_api;
 
 #[macro_use]
 pub extern crate objc;
+pub use dispatch;
 pub use cocoa;
 pub use core_foundation;
 pub use core_graphics;
@@ -28,7 +29,7 @@ pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
     registry.register_member(plygui_api::markup::MEMBER_TYPE_BUTTON.into(), button::spawn).unwrap();
     registry.register_member(plygui_api::markup::MEMBER_TYPE_LINEAR_LAYOUT.into(), layout_linear::spawn).unwrap();
     registry.register_member(plygui_api::markup::MEMBER_TYPE_FRAME.into(), frame::spawn).unwrap();
-    //registry.register_member(plygui_api::markup::MEMBER_TYPE_SPLITTED.into(), splitted::spawn).unwrap();
+    registry.register_member(plygui_api::markup::MEMBER_TYPE_SPLITTED.into(), splitted::spawn).unwrap();
 }
 
 pub mod prelude {

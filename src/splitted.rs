@@ -396,10 +396,10 @@ fn vertical_to_orientation(vertical: BOOL) -> layout::Orientation {
     }
 }
 
-/*#[allow(dead_code)]
+#[allow(dead_code)]
 pub(crate) fn spawn() -> Box<controls::Control> {
-    Splitted::with_orientation(layout::Orientation::Vertical).into_control()
-}*/
+    Splitted::with_content(text::Text::empty().into_control(), text::Text::empty().into_control(), layout::Orientation::Horizontal).into_control()
+}
 unsafe fn register_delegate() -> common::RefClass {
     let superclass = Class::get("NSObject").unwrap();
     let mut decl = ClassDecl::new("PlyguiSplitterDelegate", superclass).unwrap();
