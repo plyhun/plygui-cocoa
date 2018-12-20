@@ -91,6 +91,7 @@ impl SingleContainerInner for CocoaFrame {
                 }
 		    }
         }
+        self.base.invalidate();
         old
     }
     fn child(&self) -> Option<&dyn controls::Control> {

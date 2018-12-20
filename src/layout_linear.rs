@@ -63,9 +63,9 @@ impl MultiContainerInner for CocoaLinearLayout {
         if self.base.root().is_some() {
             new.on_added_to_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() }, w as i32, h as i32, w, h);
         }
-        self.base.invalidate();
         self.children.insert(index, new);
-
+        self.base.invalidate();
+        
         old
     }
     fn remove_child_from(&mut self, _: &mut MemberBase, index: usize) -> Option<Box<dyn controls::Control>> {

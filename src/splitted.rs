@@ -11,6 +11,7 @@ lazy_static! {
 pub type Splitted = Member<Control<MultiContainer<CocoaSplitted>>>;
 
 const BASE_CLASS: &str = "NSSplitView";
+const PADDING: f64 = 4.0; // TODO WHY??
 
 #[repr(C)]
 pub struct CocoaSplitted {
@@ -29,8 +30,8 @@ impl CocoaSplitted {
             layout::Orientation::Vertical => h,
         };
         (
-            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32)),
-            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32)),
+            utils::coord_to_size((target as f32 * self.splitter) as i32 - (splitter as i32) - PADDING as i32),
+            utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32) - PADDING as i32),
         )
     }
     fn update_splitter(&mut self) {
@@ -131,7 +132,7 @@ impl MultiContainerInner for CocoaSplitted {
             },
             _ => return None,
         }
-	
+    	self.base.invalidate();
         Some(child)
     }
     fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<dyn controls::Control>> {
@@ -310,10 +311,10 @@ impl Drawable for CocoaSplitted {
         self.first.draw(Some((0, 0)));
         match o {
         	layout::Orientation::Horizontal => {
-	        	self.second.draw(Some((first as i32 + splitter as i32, 0)));
+	        	self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, 0)));
         	},
         	layout::Orientation::Vertical => {
-	        	self.second.draw(Some((0, first as i32 + splitter as i32)));
+	        	self.second.draw(Some((0, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
         	},
         }
     }
