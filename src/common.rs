@@ -138,7 +138,9 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 } else {
                     panic!("Parent member is unsupported, neither a control, nor a window");
                 }
-            } 
+            } else {
+                this.draw(None);
+            }
         }
     }
     pub fn as_outer(&self) -> &T {

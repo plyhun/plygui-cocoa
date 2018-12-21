@@ -235,10 +235,8 @@ impl Drawable for CocoaFrame {
         }
     }
     fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        use std::cmp::max;
-
         let old_size = self.base.measured_size;
-        let hp = INNER_PADDING_H + INNER_PADDING_H + 1;
+        let hp = INNER_PADDING_H + INNER_PADDING_H;
         let vp = INNER_PADDING_V;
         self.base.measured_size = match member.visibility {
             types::Visibility::Gone => (0, 0),
@@ -250,11 +248,11 @@ impl Drawable for CocoaFrame {
                     layout::Size::WrapContent => {
                         let mut w = 0;
                         if let Some(ref mut child) = self.child {
-                            let (cw, _, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
-                            w += max(cw as i32, self.label_padding.0);
+                            let (cw, _, _) = child.measure(cmp::max(0, parent_width as i32 - hp) as u16, cmp::max(0, parent_height as i32 - vp) as u16);
+                            w += cmp::max(cw as i32, self.label_padding.0);
                             measured = true;
                         }
-                        max(0, w as i32 + hp) as u16
+                        cmp::max(0, w as i32 + hp) as u16
                     }
                 };
                 let h = match control.layout.height {
@@ -266,12 +264,12 @@ impl Drawable for CocoaFrame {
                             let ch = if measured {
                                 child.size().1
                             } else {
-                                let (_, ch, _) = child.measure(max(0, parent_width as i32 - hp) as u16, max(0, parent_height as i32 - vp) as u16);
+                                let (_, ch, _) = child.measure(cmp::max(0, parent_width as i32 - hp) as u16, cmp::max(0, parent_height as i32 - vp) as u16);
                                 ch
                             };
                             h += ch as i32 + self.label_padding.1;
                         }
-                        max(0, h as i32 + vp) as u16
+                        cmp::max(0, h as i32 + vp) as u16
                     }
                 };
                 (w, h)

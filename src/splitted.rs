@@ -311,6 +311,7 @@ impl Drawable for CocoaSplitted {
         let (pw, ph) = self.base.measured_size;
         let (fw, fh) = self.first.size();
         let (sw, sh) = self.second.size();
+        // TODO why children of splitted are drawn from top rather from bottom?
         match o {
         	layout::Orientation::Horizontal => {
 	        	self.first.draw(Some((0, ph as i32 - fh as i32)));
