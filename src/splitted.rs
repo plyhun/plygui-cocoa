@@ -308,13 +308,17 @@ impl Drawable for CocoaSplitted {
         let splitter: f32 = unsafe {msg_send![self.base.control, dividerThickness]};
         let o = self.layout_orientation();
         let (first, _) = self.children_sizes();
-        self.first.draw(Some((0, 0)));
+        let (pw, ph) = self.base.measured_size;
+        let (fw, fh) = self.first.size();
+        let (sw, sh) = self.second.size();
         match o {
         	layout::Orientation::Horizontal => {
-	        	self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, 0)));
+	        	self.first.draw(Some((0, ph as i32 - fh as i32)));
+                self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, ph as i32 - sh as i32)));
         	},
         	layout::Orientation::Vertical => {
-	        	self.second.draw(Some((0, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
+	        	self.first.draw(Some((pw as i32 - fw as i32, 0)));
+                self.second.draw(Some((pw as i32 - sw as i32, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
         	},
         }
     }
@@ -406,9 +410,14 @@ unsafe fn register_delegate() -> common::RefClass {
     let mut decl = ClassDecl::new("PlyguiSplitterDelegate", superclass).unwrap();
 
     decl.add_method(sel!(splitViewDidResizeSubviews:), splitter_moved as extern "C" fn(&mut Object, Sel, cocoa_id));
+    decl.add_method(sel!(splitView:resizeSubviewsWithOldSize:), splitter_resize_subviews as extern "C" fn(&mut Object, Sel, NSSize, cocoa_id));
     decl.add_ivar::<*mut c_void>(common::IVAR);
 
     common::RefClass(decl.register())
+}
+extern "C" fn splitter_resize_subviews(this: &mut Object, _: Sel, _: NSSize, _: cocoa_id) {
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };
+    sp.as_inner_mut().as_inner_mut().as_inner_mut().base.invalidate();
 }
 extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
     unsafe {
