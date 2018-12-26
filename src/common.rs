@@ -140,9 +140,6 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 }
             } else {
                 this.draw(None);
-                unsafe {
-                    let () = msg_send![parent_id, setNeedsDisplay: YES];
-                }
             }
         }
     }

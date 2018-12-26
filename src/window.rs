@@ -210,19 +210,11 @@ unsafe fn register_delegate() -> common::RefClass {
 fn window_redraw(this: &mut Object) {
     use plygui_api::controls::Member;
 
-    unsafe {
-        let window = common::member_from_cocoa_id_mut::<Window>(this).unwrap();
-        let size = window.size();
-
-        window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
-
-        if let Some(ref mut cb) = window.base_mut().handler_resize {
-            use plygui_api::controls::SingleContainer;
-
-            let w2 = common::member_from_cocoa_id_mut::<Window>(this).unwrap();
-            (cb.as_mut())(w2.as_single_container_mut().as_container_mut().as_member_mut(), size.0, size.1);
-        }
-    }
+    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    let size = window.size();
+    
+    window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
+    window.call_on_resize(size.0, size.1);
 }
 
 extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
