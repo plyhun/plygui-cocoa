@@ -222,29 +222,30 @@ impl ControlInner for CocoaSplitted {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _: i32, _: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
+        let control = self.base.control;
         let (first_size, second_size) = self.children_sizes();
         match self.layout_orientation() {
             layout::Orientation::Horizontal => {
                 let h = utils::coord_to_size(ph as i32);
                 unsafe {
-                    let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: self.first.native_id() as cocoa_id];
+                    let () = msg_send![control, addSubview: self.first.native_id() as cocoa_id];
                 }
                 self.first.on_added_to_container(self2, 0, 0, first_size, h);
                 unsafe {
-                    let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: self.second.native_id() as cocoa_id];
+                    let () = msg_send![control, addSubview: self.second.native_id() as cocoa_id];
                 }
-                self.second.on_added_to_container(self2, 0 + first_size as i32, 0, second_size, h);
+                self.second.on_added_to_container(self2, first_size as i32, 0, second_size, h);
             }
             layout::Orientation::Vertical => {
                 let w = utils::coord_to_size(pw as i32);
                 unsafe {
-                    let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: self.first.native_id() as cocoa_id];
+                    let () = msg_send![control, addSubview: self.first.native_id() as cocoa_id];
                 }
                 self.first.on_added_to_container(self2, 0, 0, w, first_size);
                 unsafe {
-                    let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: self.second.native_id() as cocoa_id];
+                    let () = msg_send![control, addSubview: self.second.native_id() as cocoa_id];
                 }
-                self.second.on_added_to_container(self2, 0, 0 + first_size as i32, w, second_size);
+                self.second.on_added_to_container(self2, 0, first_size as i32, w, second_size);
             }
         }
     }
