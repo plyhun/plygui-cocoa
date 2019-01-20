@@ -54,9 +54,9 @@ impl ButtonInner for CocoaButton {
 impl HasLabelInner for CocoaButton {
     fn label(&self) -> Cow<'_, str> {
         unsafe {
-            let label: cocoa_id = msg_send![self.base.control, title];
-            let label: *const c_void = msg_send![label, UTF8String];
-            ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
+            let title: cocoa_id = msg_send![self.base.control, title];
+            let title: *const c_void = msg_send![title, UTF8String];
+            ffi::CStr::from_ptr(title as *const c_char).to_string_lossy()
         }
     }
     fn set_label(&mut self, _: &mut MemberBase, label: &str) {

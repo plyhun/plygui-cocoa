@@ -23,6 +23,7 @@ mod layout_linear;
 mod splitted;
 mod window;
 mod text;
+mod alert;
 
 #[cfg(feature = "markup")]
 pub fn register_members(registry: &mut plygui_api::markup::MarkupRegistry) {
@@ -48,5 +49,6 @@ pub mod prelude {
 		pub use crate::frame::Frame;
 		pub use crate::splitted::Splitted;
 		pub use crate::text::Text;
+		pub use crate::alert::Alert;
 	}
 }
