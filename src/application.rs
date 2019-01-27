@@ -18,8 +18,8 @@ pub struct CocoaApplication {
     windows: Vec<cocoa_id>,
 }
 
-impl ApplicationInner for CocoaApplication {
-    fn with_name(name: &str) -> Box<Application> {
+impl NewApplication<CocoaApplication> for CocoaApplication {
+    fn init_with_name(name: &str) -> Box<Application> {
         unsafe {
             let mut app = Box::new(plygui_api::development::Application::with_inner(
                 CocoaApplication {
@@ -42,6 +42,9 @@ impl ApplicationInner for CocoaApplication {
             app
         }
     }
+}
+
+impl ApplicationInner for CocoaApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
         use plygui_api::controls::Member;
 

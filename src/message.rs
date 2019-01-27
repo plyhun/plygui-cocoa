@@ -3,29 +3,31 @@ use super::common::*;
 const BASE_CLASS: &str = "NSAlert";
 
 lazy_static! {
-    static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class("PlyguiAlert", BASE_CLASS, |decl| {
+    static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class("PlyguiMessage", BASE_CLASS, |decl| {
         decl.add_method(sel!(anyButtonPressed:), button_pressed as extern "C" fn(&mut Object, Sel, cocoa_id));
     }) };
 }
 
-pub type Alert = Member<CocoaAlert>;
+pub type Message = Member<CocoaMessage>;
 
 #[repr(C)]
-pub struct CocoaAlert {
+pub struct CocoaMessage {
     control: cocoa_id,
+    parent: cocoa_id,
     actions: Vec<(String, callbacks::Action, cocoa_id, Sel)>,
+    on_close: Option<callbacks::Action>,
 }
 
-impl AlertInner for CocoaAlert {
-    fn with_actions(content: types::TextContent, severity: types::AlertSeverity, mut actions: Vec<(String, callbacks::Action)>, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+impl MessageInner for CocoaMessage {
+    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&controls::Member>) -> Box<Member<Self>> {
         unsafe {
             let alert: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let alert: cocoa_id = msg_send![alert, init];
             
             let style = match severity {
-                types::AlertSeverity::Info => 1,
-                types::AlertSeverity::Warning => 0,
-                types::AlertSeverity::Alert => 2,
+                types::MessageSeverity::Info => 1,
+                types::MessageSeverity::Warning => 0,
+                types::MessageSeverity::Alert => 2,
             };
             let _ = msg_send![alert, setAlertStyle:style];
             
@@ -42,7 +44,7 @@ impl AlertInner for CocoaAlert {
                 }
             };
             
-            let actions = actions.drain(..).enumerate().map(|(index, (name, action))| {
+            let actions = actions.into_iter().enumerate().map(|(index, (name, action))| {
                 let text = NSString::alloc(cocoa::base::nil).init_str(&name);
                 let _ = msg_send![alert, addButtonWithTitle:text];
                 let buttons: cocoa_id = msg_send![alert, buttons];
@@ -54,39 +56,72 @@ impl AlertInner for CocoaAlert {
                 (name, action, old_target, old_sel)
             }).collect::<Vec<_>>();
             
+            let parent = match parent {
+                Some(parent) => {
+                    common::parent_cocoa_id(parent.native_id() as cocoa_id, true).unwrap()
+                },
+                None => 0 as cocoa_id,
+            };
+            
             let mut alert = Box::new(Member::with_inner(
-                CocoaAlert { control: alert, actions: actions },
+                CocoaMessage { control: alert, actions: actions, on_close: None, parent: parent },
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
             
             let selfptr = alert.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
             (&mut *alert.as_inner_mut().control).set_ivar(common::IVAR, selfptr);
-            println!("in {:?} = {}", selfptr, alert.as_inner_mut().actions.len());
             
-            match parent {
-                Some(parent) => {
-                    let window: cocoa_id = common::parent_cocoa_id(parent.native_id() as cocoa_id, true).unwrap();
-                    let _ = msg_send![alert.as_inner_mut().control, beginSheetModalForWindow:window completionHandler:nil];
-                },
-                None => {
-                    let _ = msg_send![alert.as_inner_mut().control, runModal];
-                }
-            }
             alert
         }
     }
-    fn severity(&self) -> types::AlertSeverity {
+    fn start(&mut self) -> Result<String, ()> {
+        let pressed: NSInteger = match self.parent as usize {
+            0 => unsafe {
+                msg_send![self.control, runModal]
+            },
+            _ => unsafe {
+                let completion_handler = ConcreteBlock::new(move |return_code: NSInteger| {
+                            let app: cocoa_id = msg_send![class!(NSApplication), sharedApplication];
+                            msg_send![app, stopModalWithCode:return_code];
+                    });
+                let completion_handler = completion_handler.copy();
+                let completion_handler: &Block<(NSInteger,), ()> = &completion_handler;
+                
+                let _ = msg_send![self.control, beginSheetModalForWindow:self.parent completionHandler:completion_handler];
+                let app: cocoa_id = msg_send![class!(NSApplication), sharedApplication];
+                let window: cocoa_id = msg_send![self.control, window];
+                msg_send![app, runModalForWindow:window]
+            },
+        };
+        dbg!(pressed);
+        /*let title = unsafe {
+            let title: cocoa_id = msg_send![pressed, title];
+            let title = msg_send![title, UTF8String];
+            ffi::CString::from_raw(title).into_string().unwrap()
+        }; */
+        Ok("".into())
+    }
+    fn severity(&self) -> types::MessageSeverity {
         let style = unsafe { msg_send![self.control, alertStyle] };
         match style {
-            0 => types::AlertSeverity::Warning,
-            1 => types::AlertSeverity::Info,
-            2 => types::AlertSeverity::Alert,
+            0 => types::MessageSeverity::Warning,
+            1 => types::MessageSeverity::Info,
+            2 => types::MessageSeverity::Alert,
             _ => unreachable!(),
         }
     }
 }
 
-impl HasLabelInner for CocoaAlert {
+impl CloseableInner for CocoaMessage {
+    fn close(&mut self, skip_callbacks: bool) {
+        
+    }
+    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+        self.on_close = callback;
+    }
+}
+
+impl HasLabelInner for CocoaMessage {
     fn label(&self) -> ::std::borrow::Cow<'_, str> {
         unsafe {
             let title: cocoa_id = msg_send![self.control, messageText];
@@ -103,7 +138,7 @@ impl HasLabelInner for CocoaAlert {
     }
 }
 
-impl MemberInner for CocoaAlert {
+impl MemberInner for CocoaMessage {
     type Id = common::CocoaId;
 
     fn size(&self) -> (u16, u16) {
@@ -128,14 +163,14 @@ impl MemberInner for CocoaAlert {
 
 extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
     unsafe {
-        let alert = common::member_from_cocoa_id_mut::<Alert>(this).unwrap();
+        let alert = common::member_from_cocoa_id_mut::<Message>(this).unwrap();
         let title = {
             let title: cocoa_id = msg_send![param, title];
             let title = msg_send![title, UTF8String];
             ffi::CString::from_raw(title).into_string().unwrap()
         }; 
         alert.as_inner_mut().actions.iter_mut().filter(|a| a.0 == title).for_each(|a| {
-            let alert2 = common::member_from_cocoa_id_mut::<Alert>(this).unwrap();
+            let alert2 = common::member_from_cocoa_id_mut::<Message>(this).unwrap();
             (a.1.as_mut())(alert2);
             let _ = msg_send![a.2, performSelector:a.3 withObject:param];
         });
@@ -146,4 +181,4 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
     }
 }
 
-impl_all_defaults!(Alert);
+impl_all_defaults!(Message);

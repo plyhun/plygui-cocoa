@@ -17,6 +17,7 @@ pub struct CocoaWindow {
     pub(crate) container: cocoa_id,
 
     child: Option<Box<dyn controls::Control>>,
+    on_close: Option<callbacks::Action>,
 }
 
 impl CocoaWindow {
@@ -32,6 +33,15 @@ impl CocoaWindow {
             child.measure(size.0, size.1);
             child.draw(Some((0, 0)));
         }
+    }
+}
+
+impl CloseableInner for CocoaWindow {
+    fn close(&mut self, skip_callbacks: bool) {
+        
+    }
+    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+        self.on_close = callback;
     }
 }
 
@@ -66,7 +76,7 @@ impl WindowInner for CocoaWindow {
             let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(Member::with_inner(
-                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None }, ()), ()),
+                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None, on_close: None }, ()), ()),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 

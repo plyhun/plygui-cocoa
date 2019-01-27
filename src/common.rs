@@ -6,9 +6,10 @@ pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
 pub use self::cocoa::appkit::NSView;
 pub use self::cocoa::base::{id as cocoa_id, nil};
-pub use self::cocoa::foundation::{NSPoint, NSRange, NSRect, NSSize, NSString};
+pub use self::cocoa::foundation::{NSPoint, NSRange, NSRect, NSSize, NSString, NSInteger};
 pub use objc::declare::ClassDecl;
 pub use objc::runtime::{class_copyIvarList, Class, Ivar, Object, Sel, BOOL, NO, YES};
+pub use block::{ConcreteBlock, Block, RcBlock};
 
 pub use plygui_api::development::*;
 pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
