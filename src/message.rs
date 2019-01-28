@@ -93,14 +93,8 @@ impl MessageInner for CocoaMessage {
                 msg_send![app, runModalForWindow:window]
             },
         };
-        dbg!(pressed);
-        pressed = 1000 - pressed;
-        /*let title = unsafe {
-            let title: cocoa_id = msg_send![pressed, title];
-            let title = msg_send![title, UTF8String];
-            ffi::CString::from_raw(title).into_string().unwrap()
-        }; */
-        self.actions.iter().enumerate().find(|(i,_)| *i == pressed as usize).map(|(_, a)| a.0.clone()).ok_or(())
+        pressed -= 1000;
+        self.actions.get(pressed as usize).map(|a| a.0.clone()).ok_or(())
     }
     fn severity(&self) -> types::MessageSeverity {
         let style = unsafe { msg_send![self.control, alertStyle] };
@@ -176,8 +170,6 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
             (a.1.as_mut())(alert2);
             let _ = msg_send![a.2, performSelector:a.3 withObject:param];
         });
-        
-        println!("out {:?} = {}", common::cast_cocoa_id_to_ptr(this).unwrap(), alert.as_inner_mut().actions.len());
         
         mem::forget(title);
     }

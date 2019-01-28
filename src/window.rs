@@ -236,8 +236,7 @@ extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
 extern "C" fn window_did_change_screen(this: &mut Object, _: Sel, _: cocoa_id) {
     window_redraw(this)
 }
-extern "C" fn window_should_close(this: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
-    dbg!((&this, param));
+extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
     if !window.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
         if let Some(ref mut on_close) = window.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
