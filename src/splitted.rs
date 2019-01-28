@@ -413,9 +413,13 @@ unsafe fn register_delegate() -> common::RefClass {
 
     decl.add_method(sel!(splitViewDidResizeSubviews:), splitter_moved as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(splitView:resizeSubviewsWithOldSize:), splitter_resize_subviews as extern "C" fn(&mut Object, Sel, NSSize, cocoa_id));
+    decl.add_method(sel!(shouldAdjustSizeOfSubview:), adjust_subview_size as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_ivar::<*mut c_void>(common::IVAR);
 
     common::RefClass(decl.register())
+}
+extern "C" fn adjust_subview_size(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
+    NO
 }
 extern "C" fn splitter_resize_subviews(this: &mut Object, _: Sel, _: NSSize, _: cocoa_id) {
     let sp = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };

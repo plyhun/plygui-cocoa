@@ -15,7 +15,6 @@ pub struct CocoaMessage {
     control: cocoa_id,
     parent: cocoa_id,
     actions: Vec<(String, callbacks::Action, cocoa_id, Sel)>,
-    on_close: Option<callbacks::Action>,
 }
 
 impl MessageInner for CocoaMessage {
@@ -64,7 +63,7 @@ impl MessageInner for CocoaMessage {
             };
             
             let mut alert = Box::new(Member::with_inner(
-                CocoaMessage { control: alert, actions: actions, on_close: None, parent: parent },
+                CocoaMessage { control: alert, actions: actions, parent: parent },
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
             
@@ -104,16 +103,6 @@ impl MessageInner for CocoaMessage {
             2 => types::MessageSeverity::Alert,
             _ => unreachable!(),
         }
-    }
-}
-
-impl CloseableInner for CocoaMessage {
-    fn close(&mut self, skip_callbacks: bool) {
-        //self.skip_callbacks = skip_callbacks;
-        let _ = unsafe { msg_send![self.control, close] };        
-    }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
-        self.on_close = callback;
     }
 }
 
