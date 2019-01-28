@@ -75,7 +75,7 @@ impl MessageInner for CocoaMessage {
         }
     }
     fn start(&mut self) -> Result<String, ()> {
-        let pressed: NSInteger = match self.parent as usize {
+        let mut pressed: NSInteger = match self.parent as usize {
             0 => unsafe {
                 msg_send![self.control, runModal]
             },
@@ -94,12 +94,13 @@ impl MessageInner for CocoaMessage {
             },
         };
         dbg!(pressed);
+        pressed = 1000 - pressed;
         /*let title = unsafe {
             let title: cocoa_id = msg_send![pressed, title];
             let title = msg_send![title, UTF8String];
             ffi::CString::from_raw(title).into_string().unwrap()
         }; */
-        Ok("".into())
+        self.actions.iter().enumerate().find(|(i,_)| *i == pressed as usize).map(|(_, a)| a.0.clone()).ok_or(())
     }
     fn severity(&self) -> types::MessageSeverity {
         let style = unsafe { msg_send![self.control, alertStyle] };
@@ -114,7 +115,8 @@ impl MessageInner for CocoaMessage {
 
 impl CloseableInner for CocoaMessage {
     fn close(&mut self, skip_callbacks: bool) {
-        
+        //self.skip_callbacks = skip_callbacks;
+        let _ = unsafe { msg_send![self.control, close] };        
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;

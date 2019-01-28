@@ -39,7 +39,8 @@ impl CocoaWindow {
 
 impl CloseableInner for CocoaWindow {
     fn close(&mut self, skip_callbacks: bool) {
-        
+        self.skip_callbacks = skip_callbacks;
+        let _ = unsafe { msg_send![self.window, close] };        
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
