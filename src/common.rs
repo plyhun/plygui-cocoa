@@ -164,13 +164,18 @@ impl<T: controls::Control + Sized> Drop for CocoaControlBase<T> {
 
 pub unsafe fn parent_cocoa_id(id: cocoa_id, is_root: bool) -> Option<cocoa_id> {
     let id_: cocoa_id = if is_root {
-        msg_send![id, window]
+        let is_window: BOOL = msg_send![id, isKindOfClass:class!(NSWindow)];
+        if YES == is_window {
+            id
+        } else {
+            msg_send![id, window]
+        }
     } else if let Some(parent) = has_cocoa_id_ivar(id, IVAR_PARENT) {
         parent as cocoa_id
     } else {
         msg_send![id, superview]
     };
-    if id_.is_null() || id_ == id {
+    if id_.is_null() {
         None
     } else {
         Some(id_)

@@ -18,6 +18,7 @@ pub struct CocoaWindow {
 
     child: Option<Box<dyn controls::Control>>,
     on_close: Option<callbacks::Action>,
+    skip_callbacks: bool,
 }
 
 impl CocoaWindow {
@@ -76,7 +77,7 @@ impl WindowInner for CocoaWindow {
             let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(Member::with_inner(
-                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None, on_close: None }, ()), ()),
+                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None, on_close: None, skip_callbacks: false }, ()), ()),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
@@ -203,7 +204,7 @@ unsafe fn register_delegate() -> common::RefClass {
     let superclass = Class::get("NSObject").unwrap();
     let mut decl = ClassDecl::new("PlyguiWindowDelegate", superclass).unwrap();
 
-    decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&Object, Sel, cocoa_id) -> BOOL);
+    decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_method(sel!(windowDidResize:), window_did_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&mut Object, Sel, cocoa_id));
     //decl.add_method(sel!(windowWillClose:), window_will_close as extern "C" fn(&Object, Sel, id));
@@ -234,7 +235,17 @@ extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
 extern "C" fn window_did_change_screen(this: &mut Object, _: Sel, _: cocoa_id) {
     window_redraw(this)
 }
-extern "C" fn window_should_close(_: &Object, _: Sel, _: cocoa_id) -> BOOL {
+extern "C" fn window_should_close(this: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
+    dbg!((&this, param));
+    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
+    if !window.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
+        if let Some(ref mut on_close) = window.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
+            let window2 = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
+            if !(on_close.as_mut())(window2) {
+                return NO;
+            }
+        }
+    }
     YES
 }
 
