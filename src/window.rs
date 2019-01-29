@@ -52,13 +52,16 @@ impl WindowInner for CocoaWindow {
         use self::cocoa::appkit::NSView;
 
         unsafe {
-            let rect = NSRect::new(
-                NSPoint::new(0.0, 0.0),
-                match window_size {
-                    types::WindowStartSize::Exact(width, height) => NSSize::new(width as f64, height as f64),
-                    types::WindowStartSize::Fullscreen => unimplemented!(),
+            let rect: NSRect = match window_size {
+                types::WindowStartSize::Exact(width, height) => NSRect::new(
+                    NSPoint::new(0.0, 0.0),
+                    NSSize::new(width as f64, height as f64),
+                ),
+                types::WindowStartSize::Fullscreen => {
+                    let screen: cocoa_id = msg_send![class!(NSScreen), mainScreen];
+                    msg_send![screen, frame]
                 },
-            );
+            };
             let window: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window.initWithContentRect_styleMask_backing_defer_(
                 rect,
