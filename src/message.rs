@@ -73,7 +73,7 @@ impl MessageInner for CocoaMessage {
             alert
         }
     }
-    fn start(&mut self) -> Result<String, ()> {
+    fn start(self) -> Result<String, ()> {
         let mut pressed: NSInteger = match self.parent as usize {
             0 => unsafe {
                 msg_send![self.control, runModal]

@@ -128,7 +128,7 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
             let (_, _, changed) = this.measure(pw, ph);
 
             if changed {
-                let mparent_type = mparent.as_any().get_type_id();
+                let mparent_type = mparent.as_any().type_id();
                 if let Some(control) = mparent.is_control_mut() {
                     control.invalidate();
                 } else if mparent_type == any::TypeId::of::<super::window::Window>() {
