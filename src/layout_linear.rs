@@ -51,7 +51,6 @@ impl MultiContainerInner for CocoaLinearLayout {
         let mut old = self.remove_child_from(base, index);
 
         let this = unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() };
-        dbg!(this.as_inner().base().coords);
         unsafe {
             if let Some(ref mut old) = old {
                 if self.base.root().is_some() {
