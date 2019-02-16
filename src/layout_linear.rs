@@ -50,18 +50,20 @@ impl MultiContainerInner for CocoaLinearLayout {
     fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.remove_child_from(base, index);
 
+        let this = unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() };
+        dbg!(this.as_inner().base().coords);
         unsafe {
             if let Some(ref mut old) = old {
                 if self.base.root().is_some() {
-                    old.on_removed_from_container(common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap());
+                    old.on_removed_from_container(this);
                 }
                 let () = msg_send![old.native_id() as cocoa_id, removeFromSuperview];
             }
             let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
-        let (w, h) = self.size();
+        let (w, h) = self.base.size(this.as_inner().base());
         if self.base.root().is_some() {
-            new.on_added_to_container(unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() }, w as i32, h as i32, w, h);
+            new.on_added_to_container(this, w as i32, h as i32, w, h);
         }
         self.children.insert(index, new);
         self.base.invalidate();
@@ -141,12 +143,13 @@ impl ControlInner for CocoaLinearLayout {
         let orientation = self.orientation;
         let mut x = x;
         let mut y = y;
+        
+        let self2 = unsafe { common::member_from_cocoa_id_mut::<LinearLayout>(self.base.control).unwrap() };
         for ref mut child in self.children.as_mut_slice() {
-            let self2 = unsafe { common::member_from_cocoa_id_mut::<LinearLayout>(self.base.control).unwrap() };
             unsafe {
                 let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: child.native_id() as cocoa_id];
             }
-            child.on_added_to_container(self2, x, y, self.base.measured_size.0, self.base.measured_size.1);
+            child.on_added_to_container(self2, x, y, control.measured.0, control.measured.1);
             let (xx, yy) = child.size();
             match orientation {
                 layout::Orientation::Horizontal => x += xx as i32,
@@ -192,25 +195,37 @@ impl HasLayoutInner for CocoaLinearLayout {
     }
 }
 
-impl MemberInner for CocoaLinearLayout {
+impl HasNativeIdInner for CocoaLinearLayout {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
-
+    
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }
 
+impl HasSizeInner for CocoaLinearLayout {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<LinearLayout>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for CocoaLinearLayout {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for CocoaLinearLayout {}
+
 impl Drawable for CocoaLinearLayout {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+        self.base.draw(control.coords, control.measured);
         let mut x = 0;
         let mut y = 0;
 
@@ -223,12 +238,12 @@ impl Drawable for CocoaLinearLayout {
             }
         }
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
 
         let orientation = self.orientation;
-        let old_size = self.base.measured_size;
-        self.base.measured_size = match member.visibility {
+        let old_size = control.measured;
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut measured = false;
@@ -279,7 +294,7 @@ impl Drawable for CocoaLinearLayout {
                 (w, h)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
         self.base.invalidate();
@@ -289,7 +304,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
         let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_resize(param.width as u16, param.height as u16)
+        sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
 

@@ -48,7 +48,7 @@ impl CloseableInner for CocoaWindow {
 }
 
 impl WindowInner for CocoaWindow {
-    fn with_params(title: &str, window_size: types::WindowStartSize, _menu: types::WindowMenu) -> Box<Window> {
+    fn with_params(title: &str, window_size: types::WindowStartSize, _menu: types::Menu) -> Box<Window> {
         use self::cocoa::appkit::NSView;
 
         unsafe {
@@ -93,11 +93,20 @@ impl WindowInner for CocoaWindow {
             window
         }
     }
-    fn on_frame(&mut self, cb: callbacks::Frame) {
+    fn on_frame(&mut self, cb: callbacks::OnFrame) {
         let _ = unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
     }
-    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::Frame> {
+    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::OnFrame> {
         unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
+    }
+    fn size(&self) -> (u16, u16) {
+        self.size_inner()
+    }
+    fn position(&self) -> (i32, i32) {
+        unsafe {
+            let frame: NSRect = msg_send![self.window, frame];
+            (frame.origin.x as i32, frame.origin.y as i32 - frame.size.height as i32)
+        }
     }
 }
 
@@ -138,7 +147,6 @@ impl SingleContainerInner for CocoaWindow {
             new.draw(Some((0, 0)));
         }
         self.child = child;
-
         old
     }
     fn child(&self) -> Option<&dyn controls::Control> {
@@ -173,27 +181,39 @@ impl ContainerInner for CocoaWindow {
     }
 }
 
-impl MemberInner for CocoaWindow {
+impl HasNativeIdInner for CocoaWindow {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        self.size_inner()
+    
+    unsafe fn native_id(&self) -> Self::Id {
+        self.window.into()
     }
+}
 
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
+impl HasSizeInner for CocoaWindow {
+    fn on_size_set(&mut self, _base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         unsafe {
-            let () = if types::Visibility::Visible == base.visibility {
+            let mut frame: NSRect = msg_send![self.window, frame];
+            frame.size = NSSize::new(width as f64, height as f64);
+            let () = msg_send![self.window, setFrame: frame];
+        }
+        true
+    }
+}
+
+impl HasVisibilityInner for CocoaWindow {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        unsafe {
+            let () = if types::Visibility::Visible == value {
                 msg_send![self.window, setIsVisible: YES]
             } else {
                 msg_send![self.window, setIsVisible: NO]
             };
         }
-    }
-
-    unsafe fn native_id(&self) -> Self::Id {
-        self.window.into()
+        true
     }
 }
+
+impl MemberInner for CocoaWindow {}
 
 impl Drop for CocoaWindow {
     fn drop(&mut self) {
@@ -211,25 +231,20 @@ unsafe fn register_delegate() -> common::RefClass {
     decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_method(sel!(windowDidResize:), window_did_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&mut Object, Sel, cocoa_id));
-    //decl.add_method(sel!(windowWillClose:), window_will_close as extern "C" fn(&Object, Sel, id));
-
-    //decl.add_method(sel!(windowDidBecomeKey:), window_did_become_key as extern "C" fn(&Object, Sel, id));
-    //decl.add_method(sel!(windowDidResignKey:), window_did_resign_key as extern "C" fn(&Object, Sel, id));
-
+    
     decl.add_ivar::<*mut c_void>(common::IVAR);
-    //decl.add_ivar::<*mut c_void>("plyguiApplication");
-
+    
     common::RefClass(decl.register())
 }
 
 fn window_redraw(this: &mut Object) {
-    use plygui_api::controls::Member;
+    use plygui_api::controls::HasSize;
 
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let size = window.size();
     
     window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
-    window.call_on_resize(size.0, size.1);
+    window.call_on_size(size.0, size.1);
 }
 
 extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {

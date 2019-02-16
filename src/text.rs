@@ -95,21 +95,33 @@ impl ControlInner for CocoaText {
     }
 }
 
-impl MemberInner for CocoaText {
+impl HasNativeIdInner for CocoaText {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
-
+    
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }
+
+impl HasSizeInner for CocoaText {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Text>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for CocoaText {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for CocoaText {}
 
 impl HasLayoutInner for CocoaText {
     fn on_layout_changed(&mut self, _: &mut MemberBase) {
@@ -118,12 +130,12 @@ impl HasLayoutInner for CocoaText {
 }
 
 impl Drawable for CocoaText {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+        self.base.draw(control.coords, control.measured);
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        let old_size = self.base.measured_size;
-        self.base.measured_size = match member.visibility {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size = (0, 0);
@@ -148,7 +160,7 @@ impl Drawable for CocoaText {
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             },
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
         self.base.invalidate();
@@ -164,7 +176,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Text>(this).unwrap();
         let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_resize(param.width as u16, param.height as u16)
+        sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
 impl_all_defaults!(Text);

@@ -22,8 +22,8 @@ pub type Button = Member<Control<CocoaButton>>;
 pub struct CocoaButton {
     base: common::CocoaControlBase<Button>,
 
-    h_left_clicked: Option<callbacks::Click>,
-    h_right_clicked: Option<callbacks::Click>,
+    h_left_clicked: Option<callbacks::OnClick>,
+    h_right_clicked: Option<callbacks::OnClick>,
 }
 
 impl ButtonInner for CocoaButton {
@@ -69,7 +69,7 @@ impl HasLabelInner for CocoaButton {
 }
 
 impl ClickableInner for CocoaButton {
-    fn on_click(&mut self, cb: Option<callbacks::Click>) {
+    fn on_click(&mut self, cb: Option<callbacks::OnClick>) {
         self.h_left_clicked = cb;
     }
 }
@@ -105,25 +105,37 @@ impl ControlInner for CocoaButton {
         
         fill_from_markup_base!(self, base, markup, registry, Button, [MEMBER_TYPE_BUTTON]);
         fill_from_markup_label!(self, base, markup);
-        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::Click]);
+        fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::OnClick]);
     }
 }
 
-impl MemberInner for CocoaButton {
+impl HasNativeIdInner for CocoaButton {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
-
+    
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }
+
+impl HasSizeInner for CocoaButton {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Button>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for CocoaButton {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for CocoaButton {}
 
 impl HasLayoutInner for CocoaButton {
     fn on_layout_changed(&mut self, _: &mut MemberBase) {
@@ -132,12 +144,12 @@ impl HasLayoutInner for CocoaButton {
 }
 
 impl Drawable for CocoaButton {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+        self.base.draw(control.coords, control.measured);
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        let old_size = self.base.measured_size;
-        self.base.measured_size = match member.visibility {
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => unsafe {
                 let mut label_size = (0, 0);
@@ -162,7 +174,7 @@ impl Drawable for CocoaButton {
                 (cmp::max(0, w) as u16, cmp::max(0, h) as u16)
             },
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
         self.base.invalidate();
@@ -199,7 +211,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
         let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_resize(param.width as u16, param.height as u16)
+        sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
 impl_all_defaults!(Button);

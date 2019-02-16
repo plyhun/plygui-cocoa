@@ -18,14 +18,22 @@ pub struct CocoaApplication {
     windows: Vec<cocoa_id>,
 }
 
-impl NewApplication<CocoaApplication> for CocoaApplication {
-    fn init_with_name(name: &str) -> Box<Application> {
+impl HasNativeIdInner for CocoaApplication {
+    type Id = common::CocoaId;
+
+    unsafe fn native_id(&self) -> Self::Id {
+        self.app.into()
+    }
+}
+
+impl ApplicationInner for CocoaApplication {
+    fn get() -> Box<Application> {
         unsafe {
             let mut app = Box::new(plygui_api::development::Application::with_inner(
                 CocoaApplication {
                     app: msg_send![WINDOW_CLASS.0, sharedApplication],
                     delegate: msg_send!(DELEGATE.0, new),
-                    name: name.to_owned(),
+                    name: String::new(), // name.to_owned(), // TODO later
                     windows: Vec::with_capacity(1),
                 },
                 (),
@@ -42,17 +50,17 @@ impl NewApplication<CocoaApplication> for CocoaApplication {
             app
         }
     }
-}
-
-impl ApplicationInner for CocoaApplication {
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::WindowMenu) -> Box<dyn controls::Window> {
-        use plygui_api::controls::Member;
+    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
+        use plygui_api::controls::HasNativeId;
 
         let w = window::CocoaWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.native_id() as cocoa_id);
         }
         w
+    }
+    fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
+        unimplemented!()
     }
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())

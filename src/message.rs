@@ -123,28 +123,15 @@ impl HasLabelInner for CocoaMessage {
     }
 }
 
-impl MemberInner for CocoaMessage {
+impl HasNativeIdInner for CocoaMessage {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        let frame: NSRect = unsafe { msg_send![self.control, frame] };
-        (frame.size.width as u16, frame.size.height as u16)
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        unsafe {
-            let () = if types::Visibility::Visible == base.visibility {
-                msg_send![self.control, setIsVisible: YES]
-            } else {
-                msg_send![self.control, setIsVisible: NO]
-            };
-        }
-    }
 
     unsafe fn native_id(&self) -> Self::Id {
         self.control.into()
     }
 }
+
+impl MemberInner for CocoaMessage {}
 
 extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
     unsafe {

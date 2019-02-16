@@ -68,7 +68,7 @@ impl SingleContainerInner for CocoaFrame {
                 (&mut *child_id).set_ivar(common::IVAR_PARENT, self.base.control as *mut c_void);
                 let () = msg_send![self.base.control, addSubview: child_id];
 	            let frame2 = common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap();
-	            let (pw, ph) = self.base.measured_size;
+	            let (pw, ph) = frame2.as_inner().base().measured;
 	            if self.base.root().is_some() {
 	                child.on_added_to_container(
     	                frame2,
@@ -162,7 +162,7 @@ impl ControlInner for CocoaFrame {
             unsafe {
                 let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id];
             }
-            let (pw, ph) = self.base.measured_size;
+            let (pw, ph) = control.measured;
             child.on_added_to_container(
                 frame2,
                 0,
@@ -205,21 +205,33 @@ impl ControlInner for CocoaFrame {
     }
 }
 
-impl MemberInner for CocoaFrame {
+impl HasNativeIdInner for CocoaFrame {
     type Id = common::CocoaId;
-
-    fn size(&self) -> (u16, u16) {
-        self.base.size()
-    }
-
-    fn on_set_visibility(&mut self, base: &mut MemberBase) {
-        self.base.on_set_visibility(base);
-    }
-
+    
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }
+
+impl HasSizeInner for CocoaFrame {
+    fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
+        use plygui_api::controls::HasLayout;
+        
+        let this = base.as_any_mut().downcast_mut::<Frame>().unwrap();
+        this.set_layout_width(layout::Size::Exact(width));
+        this.set_layout_width(layout::Size::Exact(height));
+        self.base.invalidate();
+        true
+    }
+}
+
+impl HasVisibilityInner for CocoaFrame {
+    fn on_visibility_set(&mut self, _base: &mut MemberBase, value: types::Visibility) -> bool {
+        self.base.on_set_visibility(value)
+    }
+}
+
+impl MemberInner for CocoaFrame {}
 
 impl HasLayoutInner for CocoaFrame {
     fn on_layout_changed(&mut self, _: &mut MemberBase) {
@@ -228,17 +240,17 @@ impl HasLayoutInner for CocoaFrame {
 }
 
 impl Drawable for CocoaFrame {
-    fn draw(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, coords: Option<(i32, i32)>) {
-        self.base.draw(coords);
+    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+        self.base.draw(control.coords, control.measured);
         if let Some(ref mut child) = self.child {
             child.draw(Some((0, INNER_PADDING_V + self.label_padding.1 as i32)));
         }
     }
-    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
-        let old_size = self.base.measured_size;
+    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+        let old_size = control.measured;
         let hp = INNER_PADDING_H + INNER_PADDING_H;
         let vp = INNER_PADDING_V;
-        self.base.measured_size = match member.visibility {
+        control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
                 let mut measured = false;
@@ -275,7 +287,7 @@ impl Drawable for CocoaFrame {
                 (w, h)
             }
         };
-        (self.base.measured_size.0, self.base.measured_size.1, self.base.measured_size != old_size)
+        (control.measured.0, control.measured.1, control.measured != old_size)
     }
     fn invalidate(&mut self, _: &mut MemberBase, _: &mut ControlBase) {
         self.base.invalidate();
@@ -290,7 +302,7 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
         let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_resize(param.width as u16, param.height as u16);
+        sp.call_on_size(param.width as u16, param.height as u16);
     }
 }
 impl_all_defaults!(Frame);

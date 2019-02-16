@@ -45,8 +45,6 @@ pub const DEFAULT_PADDING: i32 = 6;
 #[repr(C)]
 pub struct CocoaControlBase<T: controls::Control + Sized + 'static> {
     pub control: cocoa_id,
-    pub coords: Option<(i32, i32)>,
-    pub measured_size: (u16, u16),
     _marker: marker::PhantomData<T>,
 }
 
@@ -59,16 +57,13 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 control = msg_send![control, initWithFrame: rect];
                 control
             },
-            coords: None,
-            measured_size: (0, 0),
-
             _marker: marker::PhantomData,
         }
     }
-    pub fn size(&self) -> (u16, u16) {
+    pub fn size(&self, control: &ControlBase) -> (u16, u16) {
         let frame = self.frame();
         if frame.size.width < 1.0 && frame.size.height < 1.0 {
-            self.measured_size
+            control.measured
         } else {
             (frame.size.width as u16, frame.size.height as u16)
         }
@@ -94,26 +89,24 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
     pub fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         unsafe { parent_cocoa_id(self.control, true).and_then(|id| member_base_from_cocoa_id_mut(id).map(|m| m.as_member_mut())) }
     }
-    pub fn on_set_visibility(&mut self, base: &mut MemberBase) {
+    pub fn on_set_visibility(&mut self, value: types::Visibility) -> bool {
         unsafe {
-            let () = if types::Visibility::Visible == base.visibility {
+            let () = if types::Visibility::Visible == value {
                 msg_send![self.control, setHidden: NO]
             } else {
                 msg_send![self.control, setHidden: YES]
             };
         }
         self.invalidate();
+        true
     }
-    pub fn draw(&mut self, coords: Option<(i32, i32)>) {
-        if coords.is_some() {
-            self.coords = coords;
-        }
-        if let Some((x, y)) = self.coords {
-            let (_, ph) = self.parent().unwrap().size();
+    pub fn draw(&mut self, coords: Option<(i32, i32)>, (width, height): (u16, u16)) {
+        if let Some((x, y)) = coords {
+            let (_, ph) = self.parent().unwrap().is_has_size().unwrap().size();
             unsafe {
                 let mut frame: NSRect = self.frame();
-                frame.size = NSSize::new((self.measured_size.0 as i32) as f64, (self.measured_size.1 as i32) as f64);
-                frame.origin = NSPoint::new(x as f64, (ph as i32 - y - self.measured_size.1 as i32) as f64);
+                frame.size = NSSize::new(width as f64, height as f64);
+                frame.origin = NSPoint::new(x as f64, (ph as i32 - y - height as i32) as f64);
                 let () = msg_send![self.control, setFrame: frame];
             }
         }
@@ -122,7 +115,7 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
         let parent_id = self.parent_cocoa_id();
         if let Some(parent_id) = parent_id {
             let mparent = unsafe { member_base_from_cocoa_id_mut(parent_id).unwrap().as_member_mut() };
-            let (pw, ph) = mparent.size();
+            let (pw, ph) = mparent.is_has_size().unwrap().size();
             let this = unsafe { member_from_cocoa_id_mut::<T>(self.control).unwrap() };
 
             let (_, _, changed) = this.measure(pw, ph);
