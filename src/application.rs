@@ -1,6 +1,6 @@
 use super::common::*;
 
-use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicyRegular};
+use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use self::dispatch::Queue;
 
 lazy_static! {
@@ -15,7 +15,9 @@ pub struct CocoaApplication {
     app: cocoa_id,
     delegate: *mut Object,
     name: String,
-    windows: Vec<cocoa_id>,
+    
+    pub(crate) windows: Vec<cocoa_id>,
+    pub(crate) trays: Vec<cocoa_id>,
 }
 
 impl HasNativeIdInner for CocoaApplication {
@@ -35,6 +37,7 @@ impl ApplicationInner for CocoaApplication {
                     delegate: msg_send!(DELEGATE.0, new),
                     name: String::new(), // name.to_owned(), // TODO later
                     windows: Vec::with_capacity(1),
+                    trays: vec![],
                 },
                 (),
             ));
@@ -42,7 +45,7 @@ impl ApplicationInner for CocoaApplication {
             (&mut *app.as_inner_mut().app).set_ivar(IVAR, selfptr);
             (&mut *app.as_inner_mut().delegate).set_ivar(IVAR, selfptr);
             let () = msg_send![app.as_inner_mut().app, setDelegate: app.as_inner_mut().delegate];
-            let () = msg_send![app.as_inner_mut().app, setActivationPolicy: NSApplicationActivationPolicyRegular];
+            let () = msg_send![app.as_inner_mut().app, setActivationPolicy: NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular];
             
             let selfptr = selfptr as usize;
             Queue::main().r#async(move || application_frame_runner(selfptr));
@@ -54,13 +57,15 @@ impl ApplicationInner for CocoaApplication {
         use plygui_api::controls::HasNativeId;
 
         let w = window::CocoaWindow::with_params(title, size, menu);
-        unsafe {
-            self.windows.push(w.native_id() as cocoa_id);
-        }
+        unsafe { self.windows.push(w.native_id() as cocoa_id); }
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        unimplemented!()
+        use plygui_api::controls::HasNativeId;
+        
+        let tray = tray::CocoaTray::with_params(title, menu);
+        unsafe { self.trays.push(tray.native_id() as cocoa_id); }
+        tray
     }
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())
@@ -115,9 +120,23 @@ unsafe fn register_delegate() -> RefClass {
         sel!(applicationShouldTerminateAfterLastWindowClosed:),
         application_should_terminate_after_last_window_closed as extern "C" fn(&Object, Sel, cocoa_id) -> BOOL,
     );
+    decl.add_method(
+        sel!(applicationDidFinishLaunching:),
+        application_did_finish_launching as extern "C" fn(&Object, Sel, cocoa_id),
+    );
     decl.add_ivar::<*mut c_void>(IVAR);
 
     RefClass(decl.register())
+}
+
+extern "C" fn application_did_finish_launching(this: &Object, _sel: Sel, _notification: cocoa_id) {
+    if let Some(app) = unsafe { from_cocoa_id_mut(this as *const _ as *mut Object) } {
+        if app.as_inner().windows.len() < 1 {
+            if app.as_inner().trays.len() > 0 {
+                unsafe { app.as_inner_mut().app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory); }
+            }
+        }
+    }
 }
 
 extern "C" fn application_should_terminate_after_last_window_closed(_: &Object, _: Sel, _: cocoa_id) -> BOOL {
@@ -149,4 +168,8 @@ fn application_frame_runner(selfptr: usize) {
         }
     }
     Queue::main().r#async(move || application_frame_runner(selfptr));
+}
+
+unsafe fn from_cocoa_id_mut<'a>(id: cocoa_id) -> Option<&'a mut Application> {
+    cast_cocoa_id_to_ptr(id).map(|ptr| mem::transmute(ptr as *mut _ as *mut ::std::os::raw::c_void))
 }

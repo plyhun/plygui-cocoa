@@ -264,6 +264,8 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
             }
         }
     }
+    let mut app = super::application::Application::get();
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().windows.retain(|i| *i == param);
     YES
 }
 
