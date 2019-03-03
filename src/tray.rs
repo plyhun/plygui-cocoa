@@ -35,6 +35,8 @@ impl CloseableInner for CocoaTray {
             let status_bar: cocoa_id = NSStatusBar::systemStatusBar(ptr::null_mut());
             status_bar.removeStatusItem_(self.tray);
         }
+        let mut app = super::application::Application::get();
+        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().trays.retain(|i| *i == self.tray);
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
