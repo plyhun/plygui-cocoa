@@ -4,7 +4,7 @@ pub use std::borrow::Cow;
 pub use std::os::raw::c_void;
 pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
-pub use self::cocoa::appkit::NSView;
+pub use self::cocoa::appkit::{NSMenu, NSMenuItem, NSView};
 pub use self::cocoa::base::{id as cocoa_id, nil};
 pub use self::cocoa::foundation::{NSPoint, NSRange, NSRect, NSSize, NSString, NSInteger};
 pub use objc::declare::ClassDecl;
@@ -263,6 +263,84 @@ where
     f(&mut decl);
 
     common::RefClass(decl.register())
+}
+pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
+	let mut options = Vec::new();
+	let mut help = Vec::new();
+	
+	let append_item = |menu: cocoa_id, label: String, action, storage: &mut Vec<callbacks::Action>| {
+		let wlabel = NSString::alloc(cocoa::base::nil).init_str(label.as_str());
+        let item: cocoa_id = NSMenuItem::new(menu);
+        let () = msg_send![item, setTitle:wlabel];
+        let () = msg_send![menu, addItem:item];
+        
+        let id = storage.len();
+        storage.push(action);
+    };
+	let append_level = |menu: cocoa_id, label: String, items, storage: &mut Vec<callbacks::Action>| {
+		let wlabel = NSString::alloc(cocoa::base::nil).init_str(label.as_str());
+        let item: cocoa_id = NSMenuItem::new(menu);
+        let () = msg_send![item, setTitle:wlabel];
+        let () = msg_send![menu, addItem:item];
+        
+        let submenu = NSMenu::new(menu);
+        //let () = msg_send![submenu, setTitle:wlabel];
+        make_menu(submenu, items, storage);
+        item.setSubmenu_(submenu);
+        //let () = msg_send![menu, setSubmenu:submenu forItem:item];
+    };
+	let make_special = |menu, mut special: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>| {
+		for item in special.drain(..) {
+	        match item {
+	            types::MenuItem::Action(label, action, _) => {
+	                append_item(menu, label, action, storage);
+	            }
+	            types::MenuItem::Sub(label, items, _) => {
+	                append_level(menu, label, items, storage);
+	            }
+	            types::MenuItem::Delimiter => {
+	                let () = msg_send![menu, addItem:NSMenuItem::separatorItem(menu)];
+	            }
+	        }
+	    }
+	};
+	
+    for item in items.drain(..) {
+        match item {
+            types::MenuItem::Action(label, action, role) => {
+                match role {
+                    types::MenuItemRole::None => {
+                        append_item(menu, label, action, storage);
+                    }
+                    types::MenuItemRole::Options => {
+	                    options.push(types::MenuItem::Action(label, action, role));
+                    }
+                    types::MenuItemRole::Help => {
+	                    help.push(types::MenuItem::Action(label, action, role));
+                    }
+                }
+            }
+            types::MenuItem::Sub(label, items, role) => {
+                match role {
+                    types::MenuItemRole::None => {
+                        append_level(menu, label, items, storage);
+                    }
+                    types::MenuItemRole::Options => {
+	                    options.push(types::MenuItem::Sub(label, items, role));
+                    }
+                    types::MenuItemRole::Help => {
+	                    help.push(types::MenuItem::Sub(label, items, role));
+                    }
+                }
+            }
+            types::MenuItem::Delimiter => {
+                //winuser::AppendMenuW(menu, winuser::MF_SEPARATOR, 0, ptr::null_mut());
+            }
+        }
+    }
+    
+    make_special(menu, options, storage);
+    make_special(menu, help, storage);
 }
 
 extern "C" fn class_autoresizing(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {

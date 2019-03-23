@@ -51,7 +51,7 @@ impl CloseableInner for CocoaTray {
 }
 
 impl TrayInner for CocoaTray {
-    fn with_params(title: &str, _menu: types::Menu) -> Box<Member<Self>> {
+    fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
         use plygui_api::controls::HasLabel;
 
         let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(ptr::null_mut()) };

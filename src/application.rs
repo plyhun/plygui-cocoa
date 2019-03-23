@@ -30,14 +30,21 @@ impl HasNativeIdInner for CocoaApplication {
 
 impl CocoaApplication {
     pub(crate) fn remove_window(&mut self, id: cocoa_id) {
-        self.windows.retain(|i| *i == id);
+        self.windows.retain(|i| *i != id);
         self.apply_execution_policy();
-        self.try_exit();
+        self.maybe_exit();
     }
     pub(crate) fn remove_tray(&mut self, id: cocoa_id) {
-        self.trays.retain(|i| *i == id);
+        self.trays.retain(|i| *i != id);
         self.apply_execution_policy();
-        self.try_exit();
+        self.maybe_exit();
+    }
+    pub(crate) fn set_app_menu(&mut self, menu: cocoa_id) {
+        /*unsafe {
+            let menuu: cocoa_id = msg_send![self.app, mainMenu];
+            menuu.itemAtIndex_(1).setSubmenu_(menu);
+        }*/
+        unsafe { let () = msg_send![self.app, setMainMenu:menu]; }
     }
     fn apply_execution_policy(&mut self) {
         if self.windows.len() < 1 && self.trays.len() > 0 {
@@ -51,7 +58,7 @@ impl CocoaApplication {
             }
         }
     }
-    fn try_exit(&mut self) -> bool {
+    fn maybe_exit(&mut self) -> bool {
         if self.windows.len() < 1 && self.trays.len() < 1 {
             unsafe {
                 let app: cocoa_id = msg_send![WINDOW_CLASS.0, sharedApplication];
@@ -147,10 +154,10 @@ impl ApplicationInner for CocoaApplication {
     fn exit(&mut self, skip_on_close: bool) -> bool {
         use crate::plygui_api::controls::Closeable;
 
-        let mut n = self.windows.len();
+        let mut n = self.windows.len() as isize;
         let mut i = n - 1;
         while i >= 0 {
-            let window = &self.windows[i];
+            let window = &self.windows[i as usize];
             if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
                 if !window.close(skip_on_close) {
                     return false;
@@ -159,10 +166,10 @@ impl ApplicationInner for CocoaApplication {
             i -= 1;
         }
 
-        n = self.trays.len();
+        n = self.trays.len() as isize;
         i = n - 1;
         while i >= 0 {
-            let tray = &self.trays[i];
+            let tray = &self.trays[i as usize];
             if let Some(tray) = unsafe { member_from_cocoa_id_mut::<super::tray::Tray>(*tray) } {
                 if !tray.close(skip_on_close) {
                     return false;
@@ -171,7 +178,7 @@ impl ApplicationInner for CocoaApplication {
             i -= 1;
         }
 
-        self.try_exit()
+        self.maybe_exit()
     }
 }
 

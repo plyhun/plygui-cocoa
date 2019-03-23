@@ -15,6 +15,7 @@ pub type Window = Member<SingleContainer<::plygui_api::development::Window<Cocoa
 pub struct CocoaWindow {
     pub(crate) window: cocoa_id,
     pub(crate) container: cocoa_id,
+    menu: cocoa_id,
 
     child: Option<Box<dyn controls::Control>>,
     on_close: Option<callbacks::Action>,
@@ -57,7 +58,7 @@ impl CloseableInner for CocoaWindow {
 }
 
 impl WindowInner for CocoaWindow {
-    fn with_params(title: &str, window_size: types::WindowStartSize, _menu: types::Menu) -> Box<Window> {
+    fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Box<Window> {
         use self::cocoa::appkit::NSView;
 
         unsafe {
@@ -68,6 +69,7 @@ impl WindowInner for CocoaWindow {
                     msg_send![screen, frame]
                 }
             };
+            let title = NSString::alloc(cocoa::base::nil).init_str(title);
             let window: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window.initWithContentRect_styleMask_backing_defer_(
                 rect,
@@ -75,12 +77,20 @@ impl WindowInner for CocoaWindow {
                 NSBackingStoreBuffered,
                 NO,
             );
+            let menu = match menu {
+                Some(menu) => {
+                    let nsmenu = NSMenu::new(window);
+                    nsmenu.initWithTitle_(title);
+                    common::make_menu(nsmenu, menu, &mut vec![]);
+                    nsmenu
+                },
+                None => nil,
+            };
             let () = msg_send![window ,cascadeTopLeftFromPoint: NSPoint::new(20., 20.)];
             window.center();
-            let title = NSString::alloc(cocoa::base::nil).init_str(title);
             let () = msg_send![window, setTitle: title];
-            let () = msg_send![window, makeKeyAndOrderFront: cocoa::base::nil];
-            let current_app = cocoa::appkit::NSRunningApplication::currentApplication(cocoa::base::nil);
+            let () = msg_send![window, makeKeyAndOrderFront: nil];
+            let current_app = cocoa::appkit::NSRunningApplication::currentApplication(nil);
             let () = msg_send![current_app, activateWithOptions: cocoa::appkit::NSApplicationActivateIgnoringOtherApps];
 
             let view = NSView::alloc(nil).initWithFrame_(rect);
@@ -92,6 +102,7 @@ impl WindowInner for CocoaWindow {
                         CocoaWindow {
                             window: window,
                             container: view,
+                            menu: menu,
                             child: None,
                             on_close: None,
                             skip_callbacks: false,
@@ -251,6 +262,7 @@ unsafe fn register_delegate() -> common::RefClass {
     decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_method(sel!(windowDidResize:), window_did_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&mut Object, Sel, cocoa_id));
+    decl.add_method(sel!(windowDidBecomeKey:), window_did_become_key as extern "C" fn(&mut Object, Sel, cocoa_id));
 
     decl.add_ivar::<*mut c_void>(common::IVAR);
 
@@ -265,6 +277,15 @@ fn window_redraw(this: &mut Object) {
 
     window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
     window.call_on_size(size.0, size.1);
+}
+
+extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
+    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    let menu = window.as_inner_mut().as_inner_mut().as_inner_mut().menu;
+    if !menu.is_null() {
+        let mut app = super::application::Application::get();
+        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
+    }
 }
 
 extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
