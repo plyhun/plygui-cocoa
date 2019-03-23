@@ -1,11 +1,12 @@
 use super::common::*;
 
-use self::cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar, NSStatusItem};
+use self::cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
 
 #[repr(C)]
 pub struct CocoaTray {
     tray: cocoa_id,
     this: *mut Tray,
+    menu: cocoa_id,
 
     on_close: Option<callbacks::Action>,
 }
@@ -55,15 +56,28 @@ impl TrayInner for CocoaTray {
         use plygui_api::controls::HasLabel;
 
         let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(ptr::null_mut()) };
+        
+        let menu = match menu {
+            Some(menu) => unsafe {
+                let nsmenu = NSMenu::new(status_bar);
+                let () = msg_send![nsmenu, setTitle: title];
+                common::make_menu(nsmenu, menu, &mut vec![]);
+                nsmenu
+            },
+            None => nil,
+        };
+        
         let mut t = Box::new(Member::with_inner(
             CocoaTray {
                 tray: unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) },
                 this: ptr::null_mut(),
+                menu: menu,
                 on_close: None,
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
         t.set_label(title);
+        unsafe { let () = msg_send![t.as_inner_mut().tray, setMenu: menu]; }
         t.as_inner_mut().this = t.as_mut() as *mut Tray;
 
         t

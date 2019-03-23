@@ -265,7 +265,7 @@ where
     common::RefClass(decl.register())
 }
 pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>) {
-	let mut options = Vec::new();
+	let mut none = Vec::new();
 	let mut help = Vec::new();
 	
 	let append_item = |menu: cocoa_id, label: String, action, storage: &mut Vec<callbacks::Action>| {
@@ -284,10 +284,10 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
         let () = msg_send![menu, addItem:item];
         
         let submenu = NSMenu::new(menu);
-        //let () = msg_send![submenu, setTitle:wlabel];
+        let () = msg_send![submenu, setTitle:wlabel];
         make_menu(submenu, items, storage);
-        item.setSubmenu_(submenu);
-        //let () = msg_send![menu, setSubmenu:submenu forItem:item];
+        //item.setSubmenu_(submenu);
+        let () = msg_send![menu, setSubmenu:submenu forItem:item];
     };
 	let make_special = |menu, mut special: Vec<types::MenuItem>, storage: &mut Vec<callbacks::Action>| {
 		for item in special.drain(..) {
@@ -309,11 +309,11 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
         match item {
             types::MenuItem::Action(label, action, role) => {
                 match role {
-                    types::MenuItemRole::None => {
+                    types::MenuItemRole::Options => {
                         append_item(menu, label, action, storage);
                     }
-                    types::MenuItemRole::Options => {
-	                    options.push(types::MenuItem::Action(label, action, role));
+                    types::MenuItemRole::None => {
+	                    none.push(types::MenuItem::Action(label, action, role));
                     }
                     types::MenuItemRole::Help => {
 	                    help.push(types::MenuItem::Action(label, action, role));
@@ -326,7 +326,7 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
                         append_level(menu, label, items, storage);
                     }
                     types::MenuItemRole::Options => {
-	                    options.push(types::MenuItem::Sub(label, items, role));
+	                    none.push(types::MenuItem::Sub(label, items, role));
                     }
                     types::MenuItemRole::Help => {
 	                    help.push(types::MenuItem::Sub(label, items, role));
@@ -339,7 +339,7 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
         }
     }
     
-    make_special(menu, options, storage);
+    make_special(menu, none, storage);
     make_special(menu, help, storage);
 }
 

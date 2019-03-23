@@ -80,7 +80,7 @@ impl WindowInner for CocoaWindow {
             let menu = match menu {
                 Some(menu) => {
                     let nsmenu = NSMenu::new(window);
-                    nsmenu.initWithTitle_(title);
+                    let () = msg_send![nsmenu, setTitle: title];
                     common::make_menu(nsmenu, menu, &mut vec![]);
                     nsmenu
                 },
@@ -282,10 +282,10 @@ fn window_redraw(this: &mut Object) {
 extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let menu = window.as_inner_mut().as_inner_mut().as_inner_mut().menu;
-    if !menu.is_null() {
+    //if !menu.is_null() {
         let mut app = super::application::Application::get();
         app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
-    }
+    //}
 }
 
 extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
