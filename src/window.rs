@@ -19,6 +19,7 @@ pub struct CocoaWindow {
     child: Option<Box<dyn controls::Control>>,
     on_close: Option<callbacks::Action>,
     skip_callbacks: bool,
+    closed: bool,
 }
 
 impl CocoaWindow {
@@ -38,9 +39,17 @@ impl CocoaWindow {
 }
 
 impl CloseableInner for CocoaWindow {
-    fn close(&mut self, skip_callbacks: bool) {
+    fn close(&mut self, skip_callbacks: bool) -> bool {
         self.skip_callbacks = skip_callbacks;
-        let _ = unsafe { msg_send![self.window, close] };        
+        let _ = unsafe { msg_send![self.window, performClose:self.window] };
+        let screen: cocoa_id = unsafe { msg_send![self.window, screen] };
+        if screen.is_null() {
+            let mut app = super::application::Application::get();
+            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window);
+            true
+        } else {
+            false
+        }
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
         self.on_close = callback;
@@ -53,14 +62,11 @@ impl WindowInner for CocoaWindow {
 
         unsafe {
             let rect: NSRect = match window_size {
-                types::WindowStartSize::Exact(width, height) => NSRect::new(
-                    NSPoint::new(0.0, 0.0),
-                    NSSize::new(width as f64, height as f64),
-                ),
+                types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),
                 types::WindowStartSize::Fullscreen => {
                     let screen: cocoa_id = msg_send![class!(NSScreen), mainScreen];
                     msg_send![screen, frame]
-                },
+                }
             };
             let window: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window.initWithContentRect_styleMask_backing_defer_(
@@ -81,7 +87,20 @@ impl WindowInner for CocoaWindow {
             let () = msg_send![window, setContentView: view];
 
             let mut window = Box::new(Member::with_inner(
-                SingleContainer::with_inner(::plygui_api::development::Window::with_inner(CocoaWindow { window: window, container: view, child: None, on_close: None, skip_callbacks: false }, ()), ()),
+                SingleContainer::with_inner(
+                    ::plygui_api::development::Window::with_inner(
+                        CocoaWindow {
+                            window: window,
+                            container: view,
+                            child: None,
+                            on_close: None,
+                            skip_callbacks: false,
+                            closed: false,
+                        },
+                        (),
+                    ),
+                    (),
+                ),
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
@@ -89,6 +108,7 @@ impl WindowInner for CocoaWindow {
             (&mut *delegate).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
             (&mut *window.as_inner_mut().as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
             let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, setDelegate: delegate];
+            let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, makeKeyAndOrderFront: nil];
 
             window
         }
@@ -183,7 +203,7 @@ impl ContainerInner for CocoaWindow {
 
 impl HasNativeIdInner for CocoaWindow {
     type Id = common::CocoaId;
-    
+
     unsafe fn native_id(&self) -> Self::Id {
         self.window.into()
     }
@@ -231,9 +251,9 @@ unsafe fn register_delegate() -> common::RefClass {
     decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_method(sel!(windowDidResize:), window_did_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&mut Object, Sel, cocoa_id));
-    
+
     decl.add_ivar::<*mut c_void>(common::IVAR);
-    
+
     common::RefClass(decl.register())
 }
 
@@ -242,7 +262,7 @@ fn window_redraw(this: &mut Object) {
 
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let size = window.size();
-    
+
     window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
     window.call_on_size(size.0, size.1);
 }
@@ -265,7 +285,7 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
         }
     }
     let mut app = super::application::Application::get();
-    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().windows.retain(|i| *i == param);
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param);
     YES
 }
 

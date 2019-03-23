@@ -15,7 +15,7 @@ pub struct CocoaApplication {
     app: cocoa_id,
     delegate: *mut Object,
     name: String,
-    
+
     pub(crate) windows: Vec<cocoa_id>,
     pub(crate) trays: Vec<cocoa_id>,
 }
@@ -25,6 +25,42 @@ impl HasNativeIdInner for CocoaApplication {
 
     unsafe fn native_id(&self) -> Self::Id {
         self.app.into()
+    }
+}
+
+impl CocoaApplication {
+    pub(crate) fn remove_window(&mut self, id: cocoa_id) {
+        self.windows.retain(|i| *i == id);
+        self.apply_execution_policy();
+        self.try_exit();
+    }
+    pub(crate) fn remove_tray(&mut self, id: cocoa_id) {
+        self.trays.retain(|i| *i == id);
+        self.apply_execution_policy();
+        self.try_exit();
+    }
+    fn apply_execution_policy(&mut self) {
+        if self.windows.len() < 1 && self.trays.len() > 0 {
+            unsafe {
+                self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited);
+            }
+        } else {
+            unsafe {
+                self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular);
+                let () = msg_send![self.app, activateIgnoringOtherApps: YES];
+            }
+        }
+    }
+    fn try_exit(&mut self) -> bool {
+        if self.windows.len() < 1 && self.trays.len() < 1 {
+            unsafe {
+                let app: cocoa_id = msg_send![WINDOW_CLASS.0, sharedApplication];
+                let () = msg_send![app, terminate:self.app];
+            }
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -45,11 +81,11 @@ impl ApplicationInner for CocoaApplication {
             (&mut *app.as_inner_mut().app).set_ivar(IVAR, selfptr);
             (&mut *app.as_inner_mut().delegate).set_ivar(IVAR, selfptr);
             let () = msg_send![app.as_inner_mut().app, setDelegate: app.as_inner_mut().delegate];
-            let () = msg_send![app.as_inner_mut().app, setActivationPolicy: NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular];
-            
+            let () = msg_send![app.as_inner_mut().app, setActivationPolicy: NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited];
+
             let selfptr = selfptr as usize;
             Queue::main().r#async(move || application_frame_runner(selfptr));
-            
+
             app
         }
     }
@@ -57,14 +93,20 @@ impl ApplicationInner for CocoaApplication {
         use plygui_api::controls::HasNativeId;
 
         let w = window::CocoaWindow::with_params(title, size, menu);
-        unsafe { self.windows.push(w.native_id() as cocoa_id); }
+        unsafe {
+            self.windows.push(w.native_id() as cocoa_id);
+        }
+        self.apply_execution_policy();
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
         use plygui_api::controls::HasNativeId;
-        
+
         let tray = tray::CocoaTray::with_params(title, menu);
-        unsafe { self.trays.push(tray.native_id() as cocoa_id); }
+        unsafe {
+            self.trays.push(tray.native_id() as cocoa_id);
+        }
+        self.apply_execution_policy();
         tray
     }
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
@@ -101,13 +143,45 @@ impl ApplicationInner for CocoaApplication {
         }
         None
     }
+    #[allow(unused_comparisons)] // WAT?
+    fn exit(&mut self, skip_on_close: bool) -> bool {
+        use crate::plygui_api::controls::Closeable;
+
+        let mut n = self.windows.len();
+        let mut i = n - 1;
+        while i >= 0 {
+            let window = &self.windows[i];
+            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
+                if !window.close(skip_on_close) {
+                    return false;
+                }
+            }
+            i -= 1;
+        }
+
+        n = self.trays.len();
+        i = n - 1;
+        while i >= 0 {
+            let tray = &self.trays[i];
+            if let Some(tray) = unsafe { member_from_cocoa_id_mut::<super::tray::Tray>(*tray) } {
+                if !tray.close(skip_on_close) {
+                    return false;
+                }
+            }
+            i -= 1;
+        }
+
+        self.try_exit()
+    }
 }
 
 impl Drop for CocoaApplication {
     fn drop(&mut self) {
-        unsafe {
-            let () = msg_send![self.app, dealloc];
-            let () = msg_send![self.delegate, dealloc];
+        if self.exit(true) {
+            unsafe {
+                let () = msg_send![self.app, dealloc];
+                let () = msg_send![self.delegate, dealloc];
+            }
         }
     }
 }
@@ -120,10 +194,7 @@ unsafe fn register_delegate() -> RefClass {
         sel!(applicationShouldTerminateAfterLastWindowClosed:),
         application_should_terminate_after_last_window_closed as extern "C" fn(&Object, Sel, cocoa_id) -> BOOL,
     );
-    decl.add_method(
-        sel!(applicationDidFinishLaunching:),
-        application_did_finish_launching as extern "C" fn(&Object, Sel, cocoa_id),
-    );
+    decl.add_method(sel!(applicationDidFinishLaunching:), application_did_finish_launching as extern "C" fn(&Object, Sel, cocoa_id));
     decl.add_ivar::<*mut c_void>(IVAR);
 
     RefClass(decl.register())
@@ -131,16 +202,12 @@ unsafe fn register_delegate() -> RefClass {
 
 extern "C" fn application_did_finish_launching(this: &Object, _sel: Sel, _notification: cocoa_id) {
     if let Some(app) = unsafe { from_cocoa_id_mut(this as *const _ as *mut Object) } {
-        if app.as_inner().windows.len() < 1 {
-            if app.as_inner().trays.len() > 0 {
-                unsafe { app.as_inner_mut().app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory); }
-            }
-        }
+        app.as_inner_mut().apply_execution_policy();
     }
 }
 
 extern "C" fn application_should_terminate_after_last_window_closed(_: &Object, _: Sel, _: cocoa_id) -> BOOL {
-    YES
+    NO
 }
 
 fn application_frame_runner(selfptr: usize) {
