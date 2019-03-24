@@ -1,3 +1,4 @@
+use super::*;
 use super::common::*;
 
 use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
@@ -17,7 +18,7 @@ pub struct CocoaApplication {
     name: String,
 
     pub(crate) windows: Vec<cocoa_id>,
-    pub(crate) trays: Vec<cocoa_id>,
+    pub(crate) trays: Vec<*mut tray::Tray>,
 }
 
 impl HasNativeIdInner for CocoaApplication {
@@ -35,7 +36,8 @@ impl CocoaApplication {
         self.maybe_exit();
     }
     pub(crate) fn remove_tray(&mut self, id: cocoa_id) {
-        self.trays.retain(|i| *i != id);
+        let id = common::CocoaId::from(id);
+        self.trays.retain(|i| unsafe { (&**i).as_inner().native_id() } != id);
         self.apply_execution_policy();
         self.maybe_exit();
     }
@@ -105,12 +107,8 @@ impl ApplicationInner for CocoaApplication {
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        use plygui_api::controls::HasNativeId;
-
-        let tray = tray::CocoaTray::with_params(title, menu);
-        unsafe {
-            self.trays.push(tray.native_id() as cocoa_id);
-        }
+        let mut tray = tray::CocoaTray::with_params(title, menu);
+        self.trays.push(tray.as_mut());
         self.apply_execution_policy();
         tray
     }
@@ -167,11 +165,9 @@ impl ApplicationInner for CocoaApplication {
         n = self.trays.len() as isize;
         i = n - 1;
         while i >= 0 {
-            let tray = &self.trays[i as usize];
-            if let Some(tray) = unsafe { member_from_cocoa_id_mut::<super::tray::Tray>(*tray) } {
-                if !tray.close(skip_on_close) {
-                    return false;
-                }
+            let tray = self.trays[i as usize];
+            if unsafe { !(&mut *tray).close(skip_on_close) } {
+                return false;
             }
             i -= 1;
         }

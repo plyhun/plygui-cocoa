@@ -7,6 +7,9 @@ const BASE_CLASS: &str = "NSWindow";
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class("PlyguiWindow", BASE_CLASS, |_| {}) };
     static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
+    static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe { register_window_class("PlyguiWindowMenuItem", "NSMenuItem", |decl| {
+        decl.add_method(sel!(onWindowMenuItemSelect:), on_window_menu_item_select as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);        
+    }) };
 }
 
 pub type Window = Member<SingleContainer<::plygui_api::development::Window<CocoaWindow>>>;
@@ -18,6 +21,7 @@ pub struct CocoaWindow {
     menu: cocoa_id,
 
     child: Option<Box<dyn controls::Control>>,
+    menu_actions: HashMap<cocoa_id, callbacks::Action>,
     on_close: Option<callbacks::Action>,
     skip_callbacks: bool,
     closed: bool,
@@ -42,9 +46,9 @@ impl CocoaWindow {
 impl CloseableInner for CocoaWindow {
     fn close(&mut self, skip_callbacks: bool) -> bool {
         self.skip_callbacks = skip_callbacks;
-        let _ = unsafe { msg_send![self.window, performClose:self.window] };
-        let screen: cocoa_id = unsafe { msg_send![self.window, screen] };
-        if screen.is_null() {
+        let () = unsafe { msg_send![self.window, performClose:self.window] };
+        let visible: BOOL = unsafe { msg_send![self.window, isVisible] };
+        if visible == NO {
             let mut app = super::application::Application::get();
             app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window);
             true
@@ -77,15 +81,6 @@ impl WindowInner for CocoaWindow {
                 NSBackingStoreBuffered,
                 NO,
             );
-            let menu = match menu {
-                Some(menu) => {
-                    let nsmenu = NSMenu::new(window);
-                    let () = msg_send![nsmenu, setTitle: title];
-                    common::make_menu(nsmenu, menu, &mut vec![]);
-                    nsmenu
-                },
-                None => nil,
-            };
             let () = msg_send![window ,cascadeTopLeftFromPoint: NSPoint::new(20., 20.)];
             window.center();
             let () = msg_send![window, setTitle: title];
@@ -102,8 +97,9 @@ impl WindowInner for CocoaWindow {
                         CocoaWindow {
                             window: window,
                             container: view,
-                            menu: menu,
+                            menu: nil,
                             child: None,
+                            menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
                             on_close: None,
                             skip_callbacks: false,
                             closed: false,
@@ -115,12 +111,32 @@ impl WindowInner for CocoaWindow {
                 MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
             ));
 
+            let selfptr = window.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
-            (&mut *delegate).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
-            (&mut *window.as_inner_mut().as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, window.as_mut() as *mut _ as *mut ::std::os::raw::c_void);
+            (&mut *delegate).set_ivar(common::IVAR, selfptr);
+            (&mut *window.as_inner_mut().as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, selfptr);
             let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, setDelegate: delegate];
             let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, makeKeyAndOrderFront: nil];
 
+            window.as_inner_mut().as_inner_mut().as_inner_mut().menu = match menu {
+                Some(menu) => {
+                    let nsmenu = NSMenu::new(view);
+                    let () = msg_send![nsmenu, setTitle: title];
+                    
+                    unsafe fn spawn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id {
+                        let item: cocoa_id = msg_send![PLYGUI_MENU_ITEM_CLASS.0, alloc];
+                        let item: cocoa_id = msg_send![item, initWithTitle:title action:sel!(onWindowMenuItemSelect:) keyEquivalent:NSString::alloc(cocoa::base::nil).init_str("")];
+                        let () = msg_send![item, setTarget:item];
+                        (&mut *item).set_ivar(IVAR, selfptr);
+                        item
+                    }
+                    
+                    common::make_menu(nsmenu, menu, &mut window.as_inner_mut().as_inner_mut().as_inner_mut().menu_actions, spawn, selfptr);
+                    nsmenu
+                },
+                None => nil,
+            };
+            
             window
         }
     }
@@ -252,6 +268,7 @@ impl Drop for CocoaWindow {
             let () = msg_send![self.container, dealloc];
             let () = msg_send![self.window, dealloc];
         }
+        self.close(true);
     }
 }
 
@@ -307,6 +324,18 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
     }
     let mut app = super::application::Application::get();
     app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param);
+    YES
+}
+
+extern "C" fn on_window_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
+    let key = this as cocoa_id;
+    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    let window2 = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    if let Some(action) = window.as_inner_mut().as_inner_mut().as_inner_mut().menu_actions.get_mut(&key) {
+        if !(action.as_mut())(window2) {
+            return NO;
+        }
+    }
     YES
 }
 
