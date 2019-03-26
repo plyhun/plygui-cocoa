@@ -272,6 +272,7 @@ where
 }
 pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage: &mut HashMap<cocoa_id, callbacks::Action>, item_spawn: unsafe fn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id, selfptr: *mut c_void) {
 	let mut none = Vec::new();
+	let mut options = Vec::new();
 	let mut help = Vec::new();
 	
 	let append_item = |menu: cocoa_id, label: String, action, storage: &mut HashMap<cocoa_id, callbacks::Action>| {
@@ -315,7 +316,8 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
             types::MenuItem::Action(label, action, role) => {
                 match role {
                     types::MenuItemRole::Options => {
-                        append_item(menu, label, action, storage);
+                        //append_item(menu, label, action, storage);
+                        options.push(types::MenuItem::Action(label, action, role));
                     }
                     types::MenuItemRole::None => {
 	                    none.push(types::MenuItem::Action(label, action, role));
@@ -328,10 +330,11 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
             types::MenuItem::Sub(label, items, role) => {
                 match role {
                     types::MenuItemRole::None => {
-                        append_level(menu, label, items, storage);
+                        //append_level(menu, label, items, storage);
+                        none.push(types::MenuItem::Sub(label, items, role));
                     }
                     types::MenuItemRole::Options => {
-	                    none.push(types::MenuItem::Sub(label, items, role));
+	                    options.push(types::MenuItem::Sub(label, items, role));
                     }
                     types::MenuItemRole::Help => {
 	                    help.push(types::MenuItem::Sub(label, items, role));
@@ -344,6 +347,15 @@ pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage
         }
     }
     
+    /*if options.len() < 1 {
+        options.push(types::MenuItem::Action(
+        	    			"".into(), 
+        		    		(|_: &mut dyn controls::Member| {true} ).into(),
+                            types::MenuItemRole::None,
+        	    		));
+    }*/
+    
+    make_special(menu, options, storage);
     make_special(menu, none, storage);
     make_special(menu, help, storage);
 }
