@@ -1,4 +1,4 @@
-use super::common::*;
+use crate::common::{self, *};
 
 const BASE_CLASS: &str = "NSAlert";
 
@@ -151,4 +151,4 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
     }
 }
 
-impl_all_defaults!(Message);
+default_impls_as!(Message);

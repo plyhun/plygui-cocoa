@@ -1,5 +1,4 @@
-use super::*;
-use super::common::*;
+use crate::common::{self, *};
 
 use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use self::dispatch::Queue;
@@ -30,17 +29,6 @@ impl HasNativeIdInner for CocoaApplication {
 }
 
 impl CocoaApplication {
-    pub(crate) fn remove_window(&mut self, id: cocoa_id) {
-        self.windows.retain(|i| *i != id);
-        self.apply_execution_policy();
-        self.maybe_exit();
-    }
-    pub(crate) fn remove_tray(&mut self, id: cocoa_id) {
-        let id = common::CocoaId::from(id);
-        self.trays.retain(|i| unsafe { (&**i).as_inner().native_id() } != id);
-        self.apply_execution_policy();
-        self.maybe_exit();
-    }
     pub(crate) fn set_app_menu(&mut self, menu: cocoa_id) {
         /*unsafe {
             let menuu: cocoa_id = msg_send![self.app, mainMenu];
@@ -111,6 +99,17 @@ impl ApplicationInner for CocoaApplication {
         self.trays.push(tray.as_mut());
         self.apply_execution_policy();
         tray
+    }
+    fn remove_window(&mut self, id: Self::Id) {
+        let id = cocoa_id::from(id);
+        self.windows.retain(|i| *i != id);
+        self.apply_execution_policy();
+        self.maybe_exit();
+    }
+    fn remove_tray(&mut self, id: Self::Id) {
+        self.trays.retain(|i| unsafe { (&**i).as_inner().native_id() } != id);
+        self.apply_execution_policy();
+        self.maybe_exit();
     }
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())

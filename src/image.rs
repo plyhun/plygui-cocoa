@@ -1,4 +1,5 @@
-use super::common::*;
+use crate::common::{self, *};
+use crate::external::image;
 
 use core_graphics::base::{kCGBitmapByteOrderDefault, kCGImageAlphaLast};
 use core_graphics::color_space::CGColorSpace;
@@ -6,8 +7,6 @@ use core_graphics::data_provider::CGDataProvider;
 use core_graphics::image::CGImage;
 
 use std::sync::Arc;
-
-use external::image;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -236,4 +235,4 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-impl_all_defaults!(Image);
+default_impls_as!(Image);

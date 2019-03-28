@@ -1,4 +1,4 @@
-use super::common::*;
+use crate::common::{self, *};
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -479,4 +479,4 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-impl_all_defaults!(Splitted);
+default_impls_as!(Splitted);

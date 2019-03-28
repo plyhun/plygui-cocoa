@@ -1,4 +1,4 @@
-use super::common::*;
+use crate::common::{self, *};
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -312,4 +312,4 @@ pub(crate) fn spawn() -> Box<dyn controls::Control> {
     LinearLayout::with_orientation(layout::Orientation::Vertical).into_control()
 }
 
-impl_all_defaults!(LinearLayout);
+default_impls_as!(LinearLayout);

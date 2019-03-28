@@ -1,4 +1,4 @@
-use super::common::*;
+use crate::common::{self, *};
 
 use self::cocoa::appkit::{NSBackingStoreBuffered, NSWindow, NSWindowStyleMask};
 
@@ -50,7 +50,7 @@ impl CloseableInner for CocoaWindow {
         let visible: BOOL = unsafe { msg_send![self.window, isVisible] };
         if visible == NO {
             let mut app = super::application::Application::get();
-            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window);
+            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window.into());
             true
         } else {
             false
@@ -323,7 +323,7 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
         }
     }
     let mut app = super::application::Application::get();
-    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param);
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param.into());
     YES
 }
 
@@ -339,4 +339,4 @@ extern "C" fn on_window_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id)
     YES
 }
 
-impl_all_defaults!(Window);
+default_impls_as!(Window);

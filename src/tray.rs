@@ -1,4 +1,4 @@
-use super::common::*;
+use crate::common::{self, *};
 
 use self::cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
 
@@ -49,7 +49,7 @@ impl CloseableInner for CocoaTray {
             status_bar.removeStatusItem_(self.tray);
         }
         let mut app = super::application::Application::get();
-        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_tray(self.tray);
+        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_tray(self.tray.into());
         true
     }
     fn on_close(&mut self, callback: Option<callbacks::Action>) {
@@ -136,4 +136,4 @@ extern "C" fn on_tray_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id) -
     YES
 }
 
-impl_all_defaults!(Tray);
+default_impls_as!(Tray);
