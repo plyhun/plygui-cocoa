@@ -132,7 +132,7 @@ impl MultiContainerInner for CocoaSplitted {
             },
             _ => return None,
         }
-    	self.base.invalidate();
+        self.base.invalidate();
         Some(child)
     }
     fn remove_child_from(&mut self, _: &mut MemberBase, _: usize) -> Option<Box<dyn controls::Control>> {
@@ -290,7 +290,7 @@ impl HasLayoutInner for CocoaSplitted {
 
 impl HasNativeIdInner for CocoaSplitted {
     type Id = common::CocoaId;
-    
+
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
@@ -299,7 +299,7 @@ impl HasNativeIdInner for CocoaSplitted {
 impl HasSizeInner for CocoaSplitted {
     fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         use plygui_api::controls::HasLayout;
-        
+
         let this = base.as_any_mut().downcast_mut::<Splitted>().unwrap();
         this.set_layout_width(layout::Size::Exact(width));
         this.set_layout_width(layout::Size::Exact(height));
@@ -319,7 +319,7 @@ impl MemberInner for CocoaSplitted {}
 impl Drawable for CocoaSplitted {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        let splitter: f32 = unsafe {msg_send![self.base.control, dividerThickness]};
+        let splitter: f32 = unsafe { msg_send![self.base.control, dividerThickness] };
         let o = self.layout_orientation();
         let (first, _) = self.children_sizes(control);
         let (pw, ph) = control.measured;
@@ -327,14 +327,14 @@ impl Drawable for CocoaSplitted {
         let (sw, sh) = self.second.size();
         // TODO why children of splitted are drawn from top rather from bottom?
         match o {
-        	layout::Orientation::Horizontal => {
-	        	self.first.draw(Some((0, ph as i32 - fh as i32)));
+            layout::Orientation::Horizontal => {
+                self.first.draw(Some((0, ph as i32 - fh as i32)));
                 self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, ph as i32 - sh as i32)));
-        	},
-        	layout::Orientation::Vertical => {
-	        	self.first.draw(Some((pw as i32 - fw as i32, 0)));
+            }
+            layout::Orientation::Vertical => {
+                self.first.draw(Some((pw as i32 - fw as i32, 0)));
                 self.second.draw(Some((pw as i32 - sw as i32, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
-        	},
+            }
         }
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -460,7 +460,7 @@ extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
             return;
         }
         let bias = (1.0 - (splitter_first + splitter_second)) / 2.0;
-        splitter_first += bias; 
+        splitter_first += bias;
         let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
         let member = &mut *(sp.base_mut() as *mut MemberBase);
         let control = &mut *(sp.as_inner_mut().base_mut() as *mut ControlBase);

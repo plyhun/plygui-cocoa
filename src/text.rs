@@ -35,9 +35,9 @@ impl TextInner for CocoaText {
         let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
             (&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setDrawsBackground:NO];
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setEditable:NO];
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setSelectable:NO];
+            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setDrawsBackground: NO];
+            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setEditable: NO];
+            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setSelectable: NO];
         }
         b.set_label(text);
         b
@@ -89,7 +89,7 @@ impl ControlInner for CocoaText {
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, base: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_TEXT;
-        
+
         fill_from_markup_base!(self, base, markup, registry, Text, [MEMBER_TYPE_TEXT]);
         fill_from_markup_label!(self, base, markup);
     }
@@ -97,7 +97,7 @@ impl ControlInner for CocoaText {
 
 impl HasNativeIdInner for CocoaText {
     type Id = common::CocoaId;
-    
+
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
@@ -106,7 +106,7 @@ impl HasNativeIdInner for CocoaText {
 impl HasSizeInner for CocoaText {
     fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         use plygui_api::controls::HasLayout;
-        
+
         let this = base.as_any_mut().downcast_mut::<Text>().unwrap();
         this.set_layout_width(layout::Size::Exact(width));
         this.set_layout_width(layout::Size::Exact(height));

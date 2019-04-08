@@ -3,9 +3,11 @@ use crate::common::{self, *};
 use self::cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
 
 lazy_static! {
-    static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe { register_window_class("PlyguiTrayMenuItem", "NSMenuItem", |decl| {
-        decl.add_method(sel!(onTrayMenuItemSelect:), on_tray_menu_item_select as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);    
-    }) };
+    static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe {
+        register_window_class("PlyguiTrayMenuItem", "NSMenuItem", |decl| {
+            decl.add_method(sel!(onTrayMenuItemSelect:), on_tray_menu_item_select as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
+        })
+    };
 }
 
 #[repr(C)]
@@ -62,7 +64,7 @@ impl TrayInner for CocoaTray {
         use plygui_api::controls::HasLabel;
 
         let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(nil) };
-        
+
         let mut t = Box::new(Member::with_inner(
             CocoaTray {
                 tray: unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) },
@@ -73,7 +75,7 @@ impl TrayInner for CocoaTray {
             },
             MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
         ));
-        
+
         let selfptr = t.as_mut() as *mut Tray;
         t.set_label(title);
         t.as_inner_mut().this = selfptr;
@@ -82,22 +84,24 @@ impl TrayInner for CocoaTray {
             Some(menu) => unsafe {
                 let nsmenu = NSMenu::new(nil);
                 //let () = msg_send![nsmenu, setTitle: title];
-                
+
                 unsafe fn spawn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id {
                     let item: cocoa_id = msg_send![PLYGUI_MENU_ITEM_CLASS.0, alloc];
                     let item: cocoa_id = msg_send![item, initWithTitle:title action:sel!(onTrayMenuItemSelect:) keyEquivalent:NSString::alloc(nil).init_str("")];
-                    let () = msg_send![item, setTarget:item];
+                    let () = msg_send![item, setTarget: item];
                     (&mut *item).set_ivar(IVAR, selfptr);
                     item
                 }
-                
+
                 common::make_menu(nsmenu, menu, &mut t.as_inner_mut().menu_actions, spawn, selfptr as *mut c_void);
                 nsmenu
             },
             None => nil,
         };
-        
-        unsafe { let () = msg_send![t.as_inner_mut().tray, setMenu: menu]; }
+
+        unsafe {
+            let () = msg_send![t.as_inner_mut().tray, setMenu: menu];
+        }
         t
     }
 }

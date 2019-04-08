@@ -102,7 +102,7 @@ impl ControlInner for CocoaButton {
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, base: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
         use plygui_api::markup::MEMBER_TYPE_BUTTON;
-        
+
         fill_from_markup_base!(self, base, markup, registry, Button, [MEMBER_TYPE_BUTTON]);
         fill_from_markup_label!(self, base, markup);
         fill_from_markup_callbacks!(self, markup, registry, [on_click => plygui_api::callbacks::OnClick]);
@@ -111,7 +111,7 @@ impl ControlInner for CocoaButton {
 
 impl HasNativeIdInner for CocoaButton {
     type Id = common::CocoaId;
-    
+
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
@@ -120,7 +120,7 @@ impl HasNativeIdInner for CocoaButton {
 impl HasSizeInner for CocoaButton {
     fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         use plygui_api::controls::HasLayout;
-        
+
         let this = base.as_any_mut().downcast_mut::<Button>().unwrap();
         this.set_layout_width(layout::Size::Exact(width));
         this.set_layout_width(layout::Size::Exact(height));

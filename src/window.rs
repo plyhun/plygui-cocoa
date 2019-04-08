@@ -7,9 +7,11 @@ const BASE_CLASS: &str = "NSWindow";
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe { register_window_class("PlyguiWindow", BASE_CLASS, |_| {}) };
     static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
-    static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe { register_window_class("PlyguiWindowMenuItem", "NSMenuItem", |decl| {
-        decl.add_method(sel!(onWindowMenuItemSelect:), on_window_menu_item_select as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);        
-    }) };
+    static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe {
+        register_window_class("PlyguiWindowMenuItem", "NSMenuItem", |decl| {
+            decl.add_method(sel!(onWindowMenuItemSelect:), on_window_menu_item_select as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
+        })
+    };
 }
 
 pub type Window = Member<SingleContainer<::plygui_api::development::Window<CocoaWindow>>>;
@@ -122,21 +124,21 @@ impl WindowInner for CocoaWindow {
                 Some(menu) => {
                     let nsmenu = NSMenu::new(view);
                     let () = msg_send![nsmenu, setTitle: title];
-                    
+
                     unsafe fn spawn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id {
                         let item: cocoa_id = msg_send![PLYGUI_MENU_ITEM_CLASS.0, alloc];
                         let item: cocoa_id = msg_send![item, initWithTitle:title action:sel!(onWindowMenuItemSelect:) keyEquivalent:NSString::alloc(cocoa::base::nil).init_str("")];
-                        let () = msg_send![item, setTarget:item];
+                        let () = msg_send![item, setTarget: item];
                         (&mut *item).set_ivar(IVAR, selfptr);
                         item
                     }
-                    
+
                     common::make_menu(nsmenu, menu, &mut window.as_inner_mut().as_inner_mut().as_inner_mut().menu_actions, spawn, selfptr);
                     nsmenu
-                },
+                }
                 None => nil,
             };
-            
+
             window
         }
     }
@@ -300,8 +302,8 @@ extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let menu = window.as_inner_mut().as_inner_mut().as_inner_mut().menu;
     //if !menu.is_null() {
-        let mut app = super::application::Application::get();
-        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
+    let mut app = super::application::Application::get();
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
     //}
 }
 

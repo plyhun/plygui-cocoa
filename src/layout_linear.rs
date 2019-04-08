@@ -66,7 +66,7 @@ impl MultiContainerInner for CocoaLinearLayout {
         }
         self.children.insert(index, new);
         self.base.invalidate();
-        
+
         old
     }
     fn remove_child_from(&mut self, _: &mut MemberBase, index: usize) -> Option<Box<dyn controls::Control>> {
@@ -142,7 +142,7 @@ impl ControlInner for CocoaLinearLayout {
         let orientation = self.orientation;
         let mut x = x;
         let mut y = y;
-        
+
         let self2 = unsafe { common::member_from_cocoa_id_mut::<LinearLayout>(self.base.control).unwrap() };
         for ref mut child in self.children.as_mut_slice() {
             unsafe {
@@ -196,7 +196,7 @@ impl HasLayoutInner for CocoaLinearLayout {
 
 impl HasNativeIdInner for CocoaLinearLayout {
     type Id = common::CocoaId;
-    
+
     unsafe fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
@@ -205,7 +205,7 @@ impl HasNativeIdInner for CocoaLinearLayout {
 impl HasSizeInner for CocoaLinearLayout {
     fn on_size_set(&mut self, base: &mut MemberBase, (width, height): (u16, u16)) -> bool {
         use plygui_api::controls::HasLayout;
-        
+
         let this = base.as_any_mut().downcast_mut::<LinearLayout>().unwrap();
         this.set_layout_width(layout::Size::Exact(width));
         this.set_layout_width(layout::Size::Exact(height));

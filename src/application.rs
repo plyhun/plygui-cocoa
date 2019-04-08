@@ -34,7 +34,9 @@ impl CocoaApplication {
             let menuu: cocoa_id = msg_send![self.app, mainMenu];
             menuu.itemAtIndex_(1).setSubmenu_(menu);
         }*/
-        unsafe { let () = msg_send![self.app, setMainMenu:menu]; }
+        unsafe {
+            let () = msg_send![self.app, setMainMenu: menu];
+        }
     }
     fn apply_execution_policy(&mut self) {
         if self.windows.len() < 1 && self.trays.len() > 0 {
@@ -77,7 +79,7 @@ impl ApplicationInner for CocoaApplication {
             (&mut *app.as_inner_mut().app).set_ivar(IVAR, selfptr);
             (&mut *app.as_inner_mut().delegate).set_ivar(IVAR, selfptr);
             let () = msg_send![app.as_inner_mut().app, setDelegate: app.as_inner_mut().delegate];
-            
+
             let selfptr = selfptr as usize;
             Queue::main().r#async(move || application_frame_runner(selfptr));
 
@@ -202,7 +204,9 @@ unsafe fn register_delegate() -> RefClass {
 
 extern "C" fn application_did_finish_launching(this: &Object, _sel: Sel, _notification: cocoa_id) {
     if let Some(app) = unsafe { from_cocoa_id_mut(this as *const _ as *mut Object) } {
-        unsafe { let () = msg_send![app.as_inner_mut().app, activateIgnoringOtherApps:YES]; }
+        unsafe {
+            let () = msg_send![app.as_inner_mut().app, activateIgnoringOtherApps: YES];
+        }
         app.as_inner_mut().apply_execution_policy();
     }
 }
@@ -235,7 +239,9 @@ fn application_frame_runner(selfptr: usize) {
             }
         }
     }
-    unsafe { let () = msg_send![class!(NSThread), sleepForTimeInterval:0.1f64]; }
+    unsafe {
+        let () = msg_send![class!(NSThread), sleepForTimeInterval:0.1f64];
+    }
     Queue::main().r#async(move || application_frame_runner(selfptr));
 }
 
