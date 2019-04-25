@@ -72,6 +72,11 @@ impl ClickableInner for CocoaButton {
     fn on_click(&mut self, cb: Option<callbacks::OnClick>) {
         self.h_left_clicked = cb;
     }
+    fn click(&mut self) {
+        unsafe {
+            let ()  = msg_send![self.base.control, performClick:self.base.control];
+        }
+    }
 }
 
 impl ControlInner for CocoaButton {
