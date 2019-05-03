@@ -1,19 +1,17 @@
-pub use super::*;
+pub use plygui_api::development::*;
+pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
 
 pub use std::borrow::Cow;
 pub use std::collections::HashMap;
 pub use std::os::raw::c_void;
 pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
-pub use self::cocoa::appkit::{NSMenu, NSMenuItem, NSView};
-pub use self::cocoa::base::{id as cocoa_id, nil};
-pub use self::cocoa::foundation::{NSInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
+pub use cocoa::appkit::{NSMenu, NSMenuItem, NSView};
+pub use cocoa::base::{id as cocoa_id, nil};
+pub use cocoa::foundation::{NSInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
 pub use block::{Block, ConcreteBlock, RcBlock};
 pub use objc::declare::ClassDecl;
 pub use objc::runtime::{class_copyIvarList, Class, Ivar, Object, Sel, BOOL, NO, YES};
-
-pub use plygui_api::development::*;
-pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RefClass(pub *const Class);
@@ -142,10 +140,10 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
         }
     }
     pub fn as_outer(&self) -> &T {
-        unsafe { common::member_from_cocoa_id(self.control).unwrap() }
+        unsafe { member_from_cocoa_id(self.control).unwrap() }
     }
     pub fn as_outer_mut(&mut self) -> &mut T {
-        unsafe { common::member_from_cocoa_id_mut(self.control).unwrap() }
+        unsafe { member_from_cocoa_id_mut(self.control).unwrap() }
     }
 }
 
@@ -271,7 +269,7 @@ where
 
     f(&mut decl);
 
-    common::RefClass(decl.register())
+    RefClass(decl.register())
 }
 pub unsafe fn make_menu(menu: cocoa_id, mut items: Vec<types::MenuItem>, storage: &mut HashMap<cocoa_id, callbacks::Action>, item_spawn: unsafe fn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id, selfptr: *mut c_void) {
     let mut none = Vec::new();

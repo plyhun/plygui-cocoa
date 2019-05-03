@@ -1,7 +1,7 @@
 use crate::common::{self, *};
 
-use self::cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
-use self::dispatch::Queue;
+use cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
+use dispatch::Queue;
 
 lazy_static! {
     static ref WINDOW_CLASS: RefClass = unsafe { register_window_class("PlyguiApplication", BASE_CLASS, |_| {}) };
@@ -17,7 +17,7 @@ pub struct CocoaApplication {
     name: String,
 
     pub(crate) windows: Vec<cocoa_id>,
-    pub(crate) trays: Vec<*mut tray::Tray>,
+    pub(crate) trays: Vec<*mut crate::tray::Tray>,
 }
 
 impl HasNativeIdInner for CocoaApplication {
@@ -89,7 +89,7 @@ impl ApplicationInner for CocoaApplication {
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         use plygui_api::controls::HasNativeId;
 
-        let w = window::CocoaWindow::with_params(title, size, menu);
+        let w = crate::window::CocoaWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.native_id() as cocoa_id);
         }
@@ -97,7 +97,7 @@ impl ApplicationInner for CocoaApplication {
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let mut tray = tray::CocoaTray::with_params(title, menu);
+        let mut tray = crate::tray::CocoaTray::with_params(title, menu);
         self.trays.push(tray.as_mut());
         self.apply_execution_policy();
         tray
@@ -220,13 +220,13 @@ fn application_frame_runner(selfptr: usize) {
     let mut frame_callbacks;
     {
         for window_id in app.as_inner_mut().windows.as_mut_slice() {
-            let window: &mut window::Window = unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute(ptr)).unwrap() };
+            let window: &mut crate::window::Window = unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute(ptr)).unwrap() };
             frame_callbacks = 0;
             while frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
                 let window = window.as_inner_mut().as_inner_mut().base_mut();
                 match window.queue().try_recv() {
                     Ok(mut cmd) => {
-                        if (cmd.as_mut())(unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute::<*mut c_void, &mut window::Window>(ptr)).unwrap() }) {
+                        if (cmd.as_mut())(unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute::<*mut c_void, &mut crate::window::Window>(ptr)).unwrap() }) {
                             let _ = window.sender().send(cmd);
                         }
                         frame_callbacks += 1;

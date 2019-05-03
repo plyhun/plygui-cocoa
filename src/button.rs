@@ -1,6 +1,6 @@
 use crate::common::{self, *};
 
-use self::cocoa::appkit::NSBezelStyle;
+use cocoa::appkit::NSBezelStyle;
 
 use std::os::raw::c_char;
 

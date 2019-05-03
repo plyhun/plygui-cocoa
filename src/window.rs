@@ -1,6 +1,6 @@
 use crate::common::{self, *};
 
-use self::cocoa::appkit::{NSBackingStoreBuffered, NSWindow, NSWindowStyleMask};
+use cocoa::appkit::{NSBackingStoreBuffered, NSWindow, NSWindowStyleMask, NSView};
 
 const BASE_CLASS: &str = "NSWindow";
 
@@ -65,8 +65,6 @@ impl CloseableInner for CocoaWindow {
 
 impl WindowInner for CocoaWindow {
     fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Box<Window> {
-        use self::cocoa::appkit::NSView;
-
         unsafe {
             let rect: NSRect = match window_size {
                 types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),

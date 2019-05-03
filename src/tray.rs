@@ -1,6 +1,6 @@
 use crate::common::{self, *};
 
-use self::cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
+use cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
 
 lazy_static! {
     static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe {
