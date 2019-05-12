@@ -240,7 +240,7 @@ fn application_frame_runner(selfptr: usize) {
         }
     }
     unsafe {
-        let () = msg_send![class!(NSThread), sleepForTimeInterval:0.1f64];
+        let () = msg_send![class!(NSThread), sleepForTimeInterval:0.01f64];
     }
     Queue::main().r#async(move || application_frame_runner(selfptr));
 }
