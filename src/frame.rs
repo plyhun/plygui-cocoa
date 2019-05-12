@@ -46,7 +46,7 @@ impl FrameInner for CocoaFrame {
         unsafe {
             (&mut *frame.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
         }
-        frame.set_label(label);
+        frame.set_label(label.into());
         frame
     }
 }
@@ -107,12 +107,24 @@ impl SingleContainerInner for CocoaFrame {
 }
 
 impl ContainerInner for CocoaFrame {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
-            if child.as_member().id() == id {
-                Some(child.as_mut())
-            } else if let Some(c) = child.is_container_mut() {
-                c.find_control_by_id_mut(id)
+            match arg {
+                types::FindBy::Id(id) => {
+                    if child.as_member_mut().id() == id {
+                        return Some(child.as_mut());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = child.as_member_mut().tag() {
+                        if tag.as_str() == mytag {
+                            return Some(child.as_mut());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container_mut() {
+                c.find_control_mut(arg)
             } else {
                 None
             }
@@ -120,12 +132,24 @@ impl ContainerInner for CocoaFrame {
             None
         }
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
+    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
-            if child.as_member().id() == id {
-                Some(child.as_ref())
-            } else if let Some(c) = child.is_container() {
-                c.find_control_by_id(id)
+            match arg {
+                types::FindBy::Id(id) => {
+                    if child.as_member().id() == id {
+                        return Some(child.as_ref());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = child.as_member().tag() {
+                        if tag.as_str() == mytag {
+                            return Some(child.as_ref());
+                        }
+                    }
+                }
+            }
+            if let Some(c) = child.is_container() {
+                c.find_control(arg)
             } else {
                 None
             }
@@ -136,16 +160,16 @@ impl ContainerInner for CocoaFrame {
 }
 
 impl HasLabelInner for CocoaFrame {
-    fn label(&self) -> Cow<'_, str> {
+    fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
             let label: cocoa_id = msg_send![self.base.control, getTitle];
             let label: *const c_void = msg_send![label, UTF8String];
             ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let title = NSString::alloc(cocoa::base::nil).init_str(label);
+            let title = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.base.control, setTitle: title];
             let () = msg_send![title, release];
         }

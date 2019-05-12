@@ -113,16 +113,16 @@ impl MessageInner for CocoaMessage {
 }
 
 impl HasLabelInner for CocoaMessage {
-    fn label(&self) -> ::std::borrow::Cow<'_, str> {
+    fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
             let title: cocoa_id = msg_send![self.control, messageText];
             let title = msg_send![title, UTF8String];
             Cow::Owned(ffi::CString::from_raw(title).into_string().unwrap())
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let label = NSString::alloc(cocoa::base::nil).init_str(label);
+            let label = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.control, setMesssageText: label];
             let () = msg_send![label, release];
         }

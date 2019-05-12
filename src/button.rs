@@ -7,7 +7,7 @@ use std::os::raw::c_char;
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         register_window_class("PlyguiButton", BASE_CLASS, |decl| {
-            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id));
+            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
             decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
@@ -24,6 +24,7 @@ pub struct CocoaButton {
 
     h_left_clicked: Option<callbacks::OnClick>,
     h_right_clicked: Option<callbacks::OnClick>,
+    skip_callbacks: bool,
 }
 
 impl ButtonInner for CocoaButton {
@@ -36,6 +37,7 @@ impl ButtonInner for CocoaButton {
                     base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
                     h_left_clicked: None,
                     h_right_clicked: None,
+                    skip_callbacks: false,
                 },
                 (),
             ),
@@ -46,22 +48,22 @@ impl ButtonInner for CocoaButton {
             (&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
             let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle];
         }
-        b.set_label(label);
+        b.set_label(label.into());
         b
     }
 }
 
 impl HasLabelInner for CocoaButton {
-    fn label(&self) -> Cow<'_, str> {
+    fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
             let title: cocoa_id = msg_send![self.base.control, title];
             let title: *const c_void = msg_send![title, UTF8String];
             ffi::CStr::from_ptr(title as *const c_char).to_string_lossy()
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let title = NSString::alloc(cocoa::base::nil).init_str(label);
+            let title = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.base.control, setTitle: title];
             let () = msg_send![title, release];
         }
@@ -72,9 +74,13 @@ impl ClickableInner for CocoaButton {
     fn on_click(&mut self, cb: Option<callbacks::OnClick>) {
         self.h_left_clicked = cb;
     }
-    fn click(&mut self) {
-        unsafe {
-            let ()  = msg_send![self.base.control, performClick:self.base.control];
+    fn click(&mut self, skip_callbacks: bool) -> bool {
+        self.skip_callbacks = skip_callbacks;
+        let ret: BOOL = unsafe { msg_send![self.base.control, performClick:self.base.control] };
+        if ret == YES {
+            true
+        } else {
+            false
         }
     }
 }
@@ -191,13 +197,21 @@ pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Button::with_label("").into_control()
 }
 
-extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) {
+extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
         let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
-        if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+        if button.as_inner().as_inner().skip_callbacks {
+            YES
+        } else if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
             let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
-            (cb.as_mut())(b2);
+            if (cb.as_mut())(b2) {
+                YES
+            } else {
+                NO
+            }
+        } else {
+            YES
         }
     }
 }

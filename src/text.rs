@@ -39,22 +39,22 @@ impl TextInner for CocoaText {
             let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setEditable: NO];
             let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setSelectable: NO];
         }
-        b.set_label(text);
+        b.set_label(text.into());
         b
     }
 }
 
 impl HasLabelInner for CocoaText {
-    fn label(&self) -> Cow<'_, str> {
+    fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
             let label: cocoa_id = msg_send![self.base.control, title];
             let label: *const c_void = msg_send![label, UTF8String];
             ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let title = NSString::alloc(cocoa::base::nil).init_str(label);
+            let title = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.base.control, setString: title];
             let () = msg_send![title, release];
         }

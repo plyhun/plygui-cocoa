@@ -1,6 +1,6 @@
 use crate::common::{self, *};
 
-use cocoa::appkit::{NSBackingStoreBuffered, NSWindow, NSWindowStyleMask, NSView};
+use cocoa::appkit::{NSBackingStoreBuffered, NSView, NSWindow, NSWindowStyleMask};
 
 const BASE_CLASS: &str = "NSWindow";
 
@@ -24,7 +24,7 @@ pub struct CocoaWindow {
 
     child: Option<Box<dyn controls::Control>>,
     menu_actions: HashMap<cocoa_id, callbacks::Action>,
-    on_close: Option<callbacks::Action>,
+    on_close: Option<callbacks::OnClose>,
     skip_callbacks: bool,
     closed: bool,
 }
@@ -51,14 +51,14 @@ impl CloseableInner for CocoaWindow {
         let () = unsafe { msg_send![self.window, performClose:self.window] };
         let visible: BOOL = unsafe { msg_send![self.window, isVisible] };
         if visible == NO {
-            let mut app = super::application::Application::get();
+            let mut app = super::application::Application::get().unwrap();
             app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window.into());
             true
         } else {
             false
         }
     }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+    fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
 }
@@ -140,12 +140,6 @@ impl WindowInner for CocoaWindow {
             window
         }
     }
-    fn on_frame(&mut self, cb: callbacks::OnFrame) {
-        let _ = unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().send(cb);
-    }
-    fn on_frame_async_feeder(&mut self) -> callbacks::AsyncFeeder<callbacks::OnFrame> {
-        unsafe { member_from_cocoa_id_mut::<Window>(self.window) }.unwrap().as_inner_mut().as_inner_mut().base_mut().sender().clone().into()
-    }
     fn size(&self) -> (u16, u16) {
         self.size_inner()
     }
@@ -158,16 +152,16 @@ impl WindowInner for CocoaWindow {
 }
 
 impl HasLabelInner for CocoaWindow {
-    fn label(&self) -> ::std::borrow::Cow<'_, str> {
+    fn label(&self, _base: &MemberBase) -> ::std::borrow::Cow<'_, str> {
         unsafe {
             let title: cocoa_id = msg_send![self.window, title];
             let title = msg_send![title, UTF8String];
             Cow::Owned(ffi::CString::from_raw(title).into_string().unwrap())
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let label = NSString::alloc(cocoa::base::nil).init_str(label);
+            let label = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.window, setTitle: label];
         }
     }
@@ -210,18 +204,18 @@ impl SingleContainerInner for CocoaWindow {
 }
 
 impl ContainerInner for CocoaWindow {
-    fn find_control_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
         if let Some(child) = self.child.as_mut() {
             if let Some(c) = child.is_container_mut() {
-                return c.find_control_by_id_mut(id);
+                return c.find_control_mut(arg);
             }
         }
         None
     }
-    fn find_control_by_id(&self, id: ids::Id) -> Option<&dyn controls::Control> {
+    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
         if let Some(child) = self.child.as_ref() {
             if let Some(c) = child.is_container() {
-                return c.find_control_by_id(id);
+                return c.find_control(arg);
             }
         }
         None
@@ -300,7 +294,7 @@ extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let menu = window.as_inner_mut().as_inner_mut().as_inner_mut().menu;
     //if !menu.is_null() {
-    let mut app = super::application::Application::get();
+    let mut app = super::application::Application::get().unwrap();
     app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
     //}
 }
@@ -322,7 +316,7 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
             }
         }
     }
-    let mut app = super::application::Application::get();
+    let mut app = super::application::Application::get().unwrap();
     app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param.into());
     YES
 }

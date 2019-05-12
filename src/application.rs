@@ -1,4 +1,5 @@
 use crate::common::{self, *};
+use crate::plygui_api::controls::Container;
 
 use cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use dispatch::Queue;
@@ -119,29 +120,89 @@ impl ApplicationInner for CocoaApplication {
     fn start(&mut self) {
         unsafe { self.app.run() };
     }
-    fn find_member_by_id_mut(&mut self, id: ids::Id) -> Option<&mut dyn controls::Member> {
-        use plygui_api::controls::{Container, Member};
+    fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
+        use plygui_api::controls::Member;
 
         for window in self.windows.as_mut_slice() {
             if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
-                if window.id() == id {
-                    return Some(window);
-                } else {
-                    return window.find_control_by_id_mut(id).map(|control| control.as_member_mut());
+                match arg {
+                    types::FindBy::Id(id) => {
+                        if window.id() == id {
+                            return Some(window.as_member_mut());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = window.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(window.as_member_mut());
+                            }
+                        }
+                    }
+                }
+                let found = window.find_control_mut(arg.clone()).map(|control| control.as_member_mut());
+                if found.is_some() {
+                    return found;
+                }
+            }
+        }
+        for tray in self.trays.as_mut_slice() {
+            let tray = unsafe { &mut **tray };
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if tray.id() == *id {
+                        return Some(tray.as_member_mut());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = tray.tag() {
+                        if tag.as_str() == mytag {
+                            return Some(tray.as_member_mut());
+                        }
+                    }
                 }
             }
         }
         None
     }
-    fn find_member_by_id(&self, id: ids::Id) -> Option<&dyn controls::Member> {
-        use plygui_api::controls::{Container, Member};
+    fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
+        use plygui_api::controls::Member;
 
         for window in self.windows.as_slice() {
-            if let Some(window) = unsafe { member_from_cocoa_id::<super::window::Window>(*window) } {
-                if window.id() == id {
-                    return Some(window);
-                } else {
-                    return window.find_control_by_id(id).map(|control| control.as_member());
+            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
+                match arg {
+                    types::FindBy::Id(id) => {
+                        if window.id() == id {
+                            return Some(window.as_member());
+                        }
+                    }
+                    types::FindBy::Tag(ref tag) => {
+                        if let Some(mytag) = window.tag() {
+                            if tag.as_str() == mytag {
+                                return Some(window.as_member());
+                            }
+                        }
+                    }
+                }
+                let found = window.find_control(arg.clone()).map(|control| control.as_member());
+                if found.is_some() {
+                    return found;
+                }
+            }
+        }
+        for tray in self.trays.as_slice() {
+            let tray = unsafe { &**tray };
+            match arg {
+                types::FindBy::Id(ref id) => {
+                    if tray.id() == *id {
+                        return Some(tray.as_member());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = tray.tag() {
+                        if tag.as_str() == mytag {
+                            return Some(tray.as_member());
+                        }
+                    }
                 }
             }
         }
@@ -175,6 +236,24 @@ impl ApplicationInner for CocoaApplication {
 
         self.maybe_exit()
     }
+    fn members<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
+        Box::new(MemberIterator {
+            inner: self,
+            is_tray: false,
+            index: 0,
+            needs_window: true,
+            needs_tray: true,
+        })
+    }
+    fn members_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
+        Box::new(MemberIteratorMut {
+            inner: self,
+            is_tray: false,
+            index: 0,
+            needs_window: true,
+            needs_tray: true,
+        })
+    }
 }
 
 impl Drop for CocoaApplication {
@@ -185,6 +264,63 @@ impl Drop for CocoaApplication {
                 let () = msg_send![self.delegate, dealloc];
             }
         }
+    }
+}
+
+struct MemberIterator<'a> {
+    inner: &'a CocoaApplication,
+    needs_window: bool,
+    needs_tray: bool,
+    is_tray: bool,
+    index: usize,
+}
+impl<'a> Iterator for MemberIterator<'a> {
+    type Item = &'a (controls::Member + 'static);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.inner.windows.len() {
+            self.is_tray = true;
+            self.index = 0;
+        }
+        let ret = if self.needs_tray && self.is_tray {
+            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &controls::Member)
+        } else if self.needs_window {
+            self.inner.windows.get(self.index).map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &controls::Member)
+        } else {
+            return None;
+        };
+        self.index += 1;
+        ret
+    }
+}
+
+struct MemberIteratorMut<'a> {
+    inner: &'a mut CocoaApplication,
+    needs_window: bool,
+    needs_tray: bool,
+    is_tray: bool,
+    index: usize,
+}
+impl<'a> Iterator for MemberIteratorMut<'a> {
+    type Item = &'a mut (controls::Member);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.needs_tray && self.index >= self.inner.windows.len() {
+            self.is_tray = true;
+            self.index = 0;
+        }
+        let ret = if self.needs_tray && self.is_tray {
+            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut controls::Member)
+        } else if self.needs_window {
+            self.inner
+                .windows
+                .get_mut(self.index)
+                .map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &mut controls::Member)
+        } else {
+            return None;
+        };
+        self.index += 1;
+        ret
     }
 }
 
@@ -219,23 +355,21 @@ fn application_frame_runner(selfptr: usize) {
     let app: &mut Application = unsafe { mem::transmute(selfptr) };
     let mut frame_callbacks;
     {
-        for window_id in app.as_inner_mut().windows.as_mut_slice() {
-            let window: &mut crate::window::Window = unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute(ptr)).unwrap() };
-            frame_callbacks = 0;
-            while frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
-                let window = window.as_inner_mut().as_inner_mut().base_mut();
-                match window.queue().try_recv() {
-                    Ok(mut cmd) => {
-                        if (cmd.as_mut())(unsafe { cast_cocoa_id_to_ptr(*window_id).map(|ptr| mem::transmute::<*mut c_void, &mut crate::window::Window>(ptr)).unwrap() }) {
-                            let _ = window.sender().send(cmd);
-                        }
-                        frame_callbacks += 1;
+        frame_callbacks = 0;
+        let b = app.base_mut();
+        while frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
+            match b.queue().try_recv() {
+                Ok(mut cmd) => {
+                    let app2: &mut Application = unsafe { mem::transmute(selfptr) };
+                    if (cmd.as_mut())(app2) {
+                        let _ = b.sender().send(cmd);
                     }
-                    Err(e) => match e {
-                        mpsc::TryRecvError::Empty => break,
-                        mpsc::TryRecvError::Disconnected => unreachable!(),
-                    },
+                    frame_callbacks += 1;
                 }
+                Err(e) => match e {
+                    mpsc::TryRecvError::Empty => break,
+                    mpsc::TryRecvError::Disconnected => unreachable!(),
+                },
             }
         }
     }

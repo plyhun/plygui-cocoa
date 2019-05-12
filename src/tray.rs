@@ -16,22 +16,22 @@ pub struct CocoaTray {
     this: *mut Tray,
     menu: cocoa_id,
     menu_actions: HashMap<cocoa_id, callbacks::Action>,
-    on_close: Option<callbacks::Action>,
+    on_close: Option<callbacks::OnClose>,
 }
 
 pub type Tray = Member<CocoaTray>;
 
 impl HasLabelInner for CocoaTray {
-    fn label(&self) -> ::std::borrow::Cow<'_, str> {
+    fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
             let title: cocoa_id = msg_send![self.tray, title];
             let title = msg_send![title, UTF8String];
             Cow::Owned(ffi::CString::from_raw(title).into_string().unwrap())
         }
     }
-    fn set_label(&mut self, _: &mut MemberBase, label: &str) {
+    fn set_label(&mut self, _: &mut MemberBase, label: Cow<str>) {
         unsafe {
-            let label = NSString::alloc(cocoa::base::nil).init_str(label);
+            let label = NSString::alloc(cocoa::base::nil).init_str(&label);
             let () = msg_send![self.tray, setTitle: label];
         }
     }
@@ -50,11 +50,11 @@ impl CloseableInner for CocoaTray {
             let status_bar: cocoa_id = NSStatusBar::systemStatusBar(ptr::null_mut());
             status_bar.removeStatusItem_(self.tray);
         }
-        let mut app = super::application::Application::get();
+        let mut app = super::application::Application::get().unwrap();
         app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_tray(self.tray.into());
         true
     }
-    fn on_close(&mut self, callback: Option<callbacks::Action>) {
+    fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
 }
@@ -77,7 +77,7 @@ impl TrayInner for CocoaTray {
         ));
 
         let selfptr = t.as_mut() as *mut Tray;
-        t.set_label(title);
+        t.set_label(title.into());
         t.as_inner_mut().this = selfptr;
 
         let menu = match menu {
