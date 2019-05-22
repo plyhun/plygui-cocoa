@@ -7,7 +7,7 @@ use std::os::raw::c_char;
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         register_window_class("PlyguiButton", BASE_CLASS, |decl| {
-            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
+            decl.add_method(sel!(mouseDown:), button_left_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(rightMouseDown:), button_right_click as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
@@ -74,14 +74,9 @@ impl ClickableInner for CocoaButton {
     fn on_click(&mut self, cb: Option<callbacks::OnClick>) {
         self.h_left_clicked = cb;
     }
-    fn click(&mut self, skip_callbacks: bool) -> bool {
+    fn click(&mut self, skip_callbacks: bool) {
         self.skip_callbacks = skip_callbacks;
-        let ret: BOOL = unsafe { msg_send![self.base.control, performClick:self.base.control] };
-        if ret == YES {
-            true
-        } else {
-            false
-        }
+        let () = unsafe { msg_send![self.base.control, mouseDown:nil] };
     }
 }
 
@@ -197,21 +192,15 @@ pub(crate) fn spawn() -> Box<dyn controls::Control> {
     Button::with_label("").into_control()
 }
 
-extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
+extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) {
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
         let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
-        if button.as_inner().as_inner().skip_callbacks {
-            YES
-        } else if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+        if !button.as_inner().as_inner().skip_callbacks {
+            if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
             let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
-            if (cb.as_mut())(b2) {
-                YES
-            } else {
-                NO
-            }
-        } else {
-            YES
+                (cb.as_mut())(b2);
+            } 
         }
     }
 }
