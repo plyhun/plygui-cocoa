@@ -59,6 +59,24 @@ impl CloseableInner for CocoaTray {
     }
 }
 
+impl HasImageInner for CocoaTray {
+    fn image(&self, _base: &MemberBase) -> Cow<image::DynamicImage> {
+        unimplemented!()
+    }
+    fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
+        unsafe {
+            let thickness: f64 = msg_send![NSStatusBar::systemStatusBar(nil), thickness];
+            let i = i.resize(thickness as u32, thickness as u32, image::FilterType::Lanczos3);
+            
+        	let img = common::image_to_native(&i);
+        	let btn: cocoa_id = msg_send![self.tray, button];
+        	let () = msg_send![self.tray, setHighlightMode:YES];
+        	let () = msg_send![img, setTemplate:YES];
+        	let () = msg_send![btn, setImage:img];
+        }
+    }    
+}
+
 impl TrayInner for CocoaTray {
     fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
         use plygui_api::controls::HasLabel;

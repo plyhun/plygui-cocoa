@@ -1,12 +1,4 @@
 use crate::common::{self, *};
-use crate::external::image;
-
-use core_graphics::base::{kCGBitmapByteOrderDefault, kCGImageAlphaLast};
-use core_graphics::color_space::CGColorSpace;
-use core_graphics::data_provider::CGDataProvider;
-use core_graphics::image::CGImage;
-
-use std::sync::Arc;
 
 lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -30,18 +22,8 @@ pub struct CocoaImage {
 
 impl CocoaImage {
     fn install_image(&mut self, content: image::DynamicImage) {
-        use image::GenericImageView;
-
-        let size = content.dimensions();
-
         unsafe {
-            let color_space = CGColorSpace::create_device_rgb();
-            let provider = CGDataProvider::from_buffer(Arc::new(content.to_rgba().into_raw()));
-            let cgimage = CGImage::new(size.0 as usize, size.1 as usize, 8, 32, 4 * size.0 as usize, &color_space, kCGBitmapByteOrderDefault | kCGImageAlphaLast, &provider, true, 0);
-
-            self.img = msg_send![class!(NSImage), alloc];
-            let size = NSSize::new(size.0 as f64, size.1 as f64);
-            let () = msg_send![self.img, initWithCGImage:cgimage size:size];
+            self.img = common::image_to_native(&content);
             let () = msg_send![self.base.control, setImage:self.img];
         }
     }

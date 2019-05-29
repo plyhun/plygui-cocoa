@@ -1,9 +1,11 @@
 pub use plygui_api::development::*;
 pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
+pub use plygui_api::external::image;
 
 pub use std::borrow::Cow;
 pub use std::collections::HashMap;
 pub use std::os::raw::c_void;
+pub use std::sync::Arc;
 pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
 pub use block::{Block, ConcreteBlock, RcBlock};
@@ -12,6 +14,11 @@ pub use cocoa::base::{id as cocoa_id, nil};
 pub use cocoa::foundation::{NSInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
 pub use objc::declare::ClassDecl;
 pub use objc::runtime::{class_copyIvarList, Class, Ivar, Object, Sel, BOOL, NO, YES};
+
+pub use core_graphics::base::{kCGBitmapByteOrderDefault, kCGImageAlphaLast};
+pub use core_graphics::color_space::CGColorSpace;
+pub use core_graphics::data_provider::CGDataProvider;
+pub use core_graphics::image::CGImage;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RefClass(pub *const Class);
@@ -252,6 +259,21 @@ pub unsafe fn measure_nsstring(title: cocoa_id) -> (u16, u16) {
 
     let string_rect: NSRect = msg_send![layout_manager, boundingRectForGlyphRange:range inTextContainer:text_container];
     (string_rect.size.width as u16, string_rect.size.height as u16)
+}
+
+pub unsafe fn image_to_native(src: &image::DynamicImage) -> cocoa_id {
+    use image::GenericImageView;
+
+    let size = src.dimensions();
+
+    let color_space = CGColorSpace::create_device_rgb();
+    let provider = CGDataProvider::from_buffer(Arc::new(src.to_rgba().into_raw()));
+    let cgimage = CGImage::new(size.0 as usize, size.1 as usize, 8, 32, 4 * size.0 as usize, &color_space, kCGBitmapByteOrderDefault | kCGImageAlphaLast, &provider, true, 0);
+
+    let img: cocoa_id = msg_send![class!(NSImage), alloc];
+    let size = NSSize::new(size.0 as f64, size.1 as f64);
+    let () = msg_send![img, initWithCGImage:cgimage size:size];
+    img
 }
 
 pub unsafe fn register_window_class<F>(name: &str, base: &str, mut f: F) -> RefClass
