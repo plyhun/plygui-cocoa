@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 #[target.'cfg(target_os = "macos")'.dependencies]
 [dependencies]
-plygui-api = {version = "0.0.1", path = "../plygui-api"}
+plygui-api = {version = "0.0.1", path = "../plygui/api"}
 cocoa = {version = "~0.18"}
 core-graphics = {version = "~0.17"}
 core-foundation = {version = "~0.6"}
