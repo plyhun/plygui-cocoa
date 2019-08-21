@@ -25,6 +25,7 @@ mod splitted;
 mod text;
 mod tray;
 mod window;
+mod progress_bar;
 
 default_markup_register_members!();
 default_pub_use!();
