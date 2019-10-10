@@ -60,7 +60,7 @@ impl ImageInner for CocoaImage {
         i.as_inner_mut().as_inner_mut().install_image(content);
         i
     }
-    fn set_scale(&mut self, _member: &mut MemberBase, _control: &mut ControlBase, policy: types::ImageScalePolicy) {
+    fn set_scale(&mut self, _member: &mut MemberBase, policy: types::ImageScalePolicy) {
         if self.scale() != policy {
             let scale = policy_to_nsscale(policy);
             unsafe {

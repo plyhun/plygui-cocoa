@@ -9,6 +9,7 @@ lazy_static! {
     static ref DELEGATE: RefClass = unsafe { register_delegate() };
 }
 const BASE_CLASS: &str = "NSApplication";
+const DEFAULT_FRAME_SLEEP_MS: u32 = 10;
 
 pub type Application = plygui_api::development::Application<CocoaApplication>;
 
@@ -16,6 +17,7 @@ pub struct CocoaApplication {
     app: cocoa_id,
     delegate: *mut Object,
     name: String,
+    sleep: u32,
 
     pub(crate) windows: Vec<cocoa_id>,
     pub(crate) trays: Vec<*mut crate::tray::Tray>,
@@ -53,6 +55,7 @@ impl CocoaApplication {
     fn maybe_exit(&mut self) -> bool {
         if self.windows.len() < 1 && self.trays.len() < 1 {
             unsafe {
+                self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited);
                 let app: cocoa_id = msg_send![WINDOW_CLASS.0, sharedApplication];
                 let () = msg_send![app, terminate:self.app];
             }
@@ -71,6 +74,7 @@ impl ApplicationInner for CocoaApplication {
                     app: msg_send![WINDOW_CLASS.0, sharedApplication],
                     delegate: msg_send!(DELEGATE.0, new),
                     name: String::new(), // name.to_owned(), // TODO later
+                    sleep: DEFAULT_FRAME_SLEEP_MS,
                     windows: Vec::with_capacity(1),
                     trays: vec![],
                 },
@@ -117,6 +121,12 @@ impl ApplicationInner for CocoaApplication {
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())
     }
+    fn frame_sleep(&self) -> u32 {
+        self.sleep
+    }
+    fn set_frame_sleep(&mut self, value: u32) {
+        self.sleep = value;
+    }     
     fn start(&mut self) {
         unsafe { self.app.run() };
     }
@@ -374,7 +384,7 @@ fn application_frame_runner(selfptr: usize) {
         }
     }
     unsafe {
-        let () = msg_send![class!(NSThread), sleepForTimeInterval:0.01f64];
+        let () = msg_send![class!(NSThread), sleepForTimeInterval:(1.0 as f64 / app.as_inner().sleep as f64)];
     }
     Queue::main().r#async(move || application_frame_runner(selfptr));
 }

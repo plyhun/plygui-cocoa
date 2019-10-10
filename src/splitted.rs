@@ -41,6 +41,40 @@ impl CocoaSplitted {
             layout::Orientation::Vertical => unsafe { msg_send![self.base.control, setPosition:(control.measured.1 as f32 * self.splitter) ofDividerAtIndex:0] },
         };
     }
+    fn draw_children(&mut self, control: &ControlBase) {
+        let splitter: f32 = unsafe { msg_send![self.base.control, dividerThickness] };
+        let o = self.layout_orientation();
+        let (first, _) = self.children_sizes(control);
+        let (pw, ph) = control.measured;
+        let (fw, fh) = self.first.size();
+        let (sw, sh) = self.second.size();
+        // TODO why children of splitted are drawn from top rather from bottom?
+        match o {
+            layout::Orientation::Horizontal => {
+                self.first.draw(Some((0, ph as i32 - fh as i32)));
+                self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, ph as i32 - sh as i32)));
+            }
+            layout::Orientation::Vertical => {
+                self.first.draw(Some((pw as i32 - fw as i32, 0)));
+                self.second.draw(Some((pw as i32 - sw as i32, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
+            }
+        }
+    }
+    fn update_children_layout(&mut self, base: &ControlBase) {
+        let orientation = self.layout_orientation();
+        let (first_size, second_size) = self.children_sizes(base);
+        let (width, height) = base.measured;
+        for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
+            match orientation {
+                layout::Orientation::Horizontal => {
+                    child.measure(cmp::max(0, *size) as u16, cmp::max(0, height as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16);
+                }
+                layout::Orientation::Vertical => {
+                    child.measure(cmp::max(0, width as i32 - DEFAULT_PADDING - DEFAULT_PADDING) as u16, cmp::max(0, *size) as u16);
+                }
+            }
+        }
+    }
 }
 
 impl SplittedInner for CocoaSplitted {
@@ -76,10 +110,11 @@ impl SplittedInner for CocoaSplitted {
         }
         ll
     }
-    fn set_splitter(&mut self, _: &mut MemberBase, control: &mut ControlBase, pos: f32) {
+    fn set_splitter(&mut self, base: &mut MemberBase, pos: f32) {
+        let (_, c) = Splitted::control_base_parts_mut(base);
         let pos = pos % 1.0;
         self.splitter = pos;
-        self.update_splitter(control);
+        self.update_splitter(c);
         self.base.invalidate();
     }
     fn splitter(&self) -> f32 {
@@ -348,23 +383,7 @@ impl MemberInner for CocoaSplitted {}
 impl Drawable for CocoaSplitted {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        let splitter: f32 = unsafe { msg_send![self.base.control, dividerThickness] };
-        let o = self.layout_orientation();
-        let (first, _) = self.children_sizes(control);
-        let (pw, ph) = control.measured;
-        let (fw, fh) = self.first.size();
-        let (sw, sh) = self.second.size();
-        // TODO why children of splitted are drawn from top rather from bottom?
-        match o {
-            layout::Orientation::Horizontal => {
-                self.first.draw(Some((0, ph as i32 - fh as i32)));
-                self.second.draw(Some((first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32, ph as i32 - sh as i32)));
-            }
-            layout::Orientation::Vertical => {
-                self.first.draw(Some((pw as i32 - fw as i32, 0)));
-                self.second.draw(Some((pw as i32 - sw as i32, first as i32 + splitter as i32 + PADDING as i32 + PADDING as i32)));
-            }
-        }
+        self.draw_children(control);
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let orientation = self.layout_orientation();
@@ -491,13 +510,17 @@ extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
         let bias = (1.0 - (splitter_first + splitter_second)) / 2.0;
         splitter_first += bias;
         let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
-        let member = &mut *(sp.base_mut() as *mut MemberBase);
-        let control = &mut *(sp.as_inner_mut().base_mut() as *mut ControlBase);
         if (old_splitter - splitter_first) != 0.0 {
-            let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
-            sp.splitter = splitter_first;
-            sp.measure(member, control, size.size.width as u16, size.size.height as u16);
-            sp.draw(member, control);
+            sp.set_skip_draw(true);
+            {
+                let base = common::member_base_from_cocoa_id_mut(this).unwrap();
+                let (_, base) = Splitted::control_base_parts_mut(base);
+                let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
+                sp.splitter = splitter_first;
+                sp.update_children_layout(base);
+                sp.draw_children(base);
+            }
+            sp.set_skip_draw(false);
         }
     }
 }
