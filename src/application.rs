@@ -293,9 +293,9 @@ impl<'a> Iterator for MemberIterator<'a> {
             self.index = 0;
         }
         let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &controls::Member)
+            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &dyn controls::Member)
         } else if self.needs_window {
-            self.inner.windows.get(self.index).map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &controls::Member)
+            self.inner.windows.get(self.index).map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &dyn controls::Member)
         } else {
             return None;
         };
@@ -312,7 +312,7 @@ struct MemberIteratorMut<'a> {
     index: usize,
 }
 impl<'a> Iterator for MemberIteratorMut<'a> {
-    type Item = &'a mut (controls::Member);
+    type Item = &'a mut (dyn controls::Member);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.needs_tray && self.index >= self.inner.windows.len() {
@@ -320,12 +320,12 @@ impl<'a> Iterator for MemberIteratorMut<'a> {
             self.index = 0;
         }
         let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut controls::Member)
+            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut dyn controls::Member)
         } else if self.needs_window {
             self.inner
                 .windows
                 .get_mut(self.index)
-                .map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &mut controls::Member)
+                .map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &mut dyn controls::Member)
         } else {
             return None;
         };

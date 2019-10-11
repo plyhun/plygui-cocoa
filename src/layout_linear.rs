@@ -47,7 +47,7 @@ impl MultiContainerInner for CocoaLinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, mut new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, mut index: usize, mut new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.remove_child_from(base, index);
 
         let this = unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() };
@@ -60,11 +60,34 @@ impl MultiContainerInner for CocoaLinearLayout {
             }
             let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
-        let (w, h) = self.base.size(this.as_inner().base());
-        if self.base.root().is_some() {
-            new.on_added_to_container(this, w as i32, h as i32, w, h);
-        }
         self.children.insert(index, new);
+        let (w, h) = self.base.size(this.as_inner().base());
+        
+        let (cw, ch) = {
+            let mut w = 0;
+            let mut h = 0;
+            for i in 0..index {
+                let (cw, ch) = self.children[i].size();
+                w += cw;
+                h += ch;
+            }
+            (w as i32, h as i32)
+        };
+        
+        if self.base.root().is_some() {
+            match self.orientation {
+                layout::Orientation::Vertical => {
+                    self.children.get_mut(index).unwrap().on_added_to_container(
+                        this, 0, ch, utils::coords_to_size(w as i32), utils::coords_to_size(h as i32 - ch)
+                    );
+                },
+                layout::Orientation::Horizontal => {
+                    self.children.get_mut(index).unwrap().on_added_to_container(
+                        this, cw, 0, utils::coords_to_size(w as i32 - cw), utils::coords_to_size(h as i32)
+                    );
+                }
+            }
+        }
         self.base.invalidate();
 
         old
@@ -164,19 +187,32 @@ impl ControlInner for CocoaLinearLayout {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         let orientation = self.orientation;
-        let mut x = x;
-        let mut y = y;
+        control.coords = Some((px, py));
+        let mut x = 0;
+        let mut y = 0;
+        let mut pw = pw as i32;
+        let mut ph = ph as i32;
 
         let self2 = unsafe { common::member_from_cocoa_id_mut::<LinearLayout>(self.base.control).unwrap() };
         for ref mut child in self.children.as_mut_slice() {
             unsafe {
                 let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: child.native_id() as cocoa_id];
             }
-            child.on_added_to_container(self2, x, y, control.measured.0, control.measured.1);
+            child.on_added_to_container(
+                self2, x, y, 
+                utils::coords_to_size(pw),
+                utils::coords_to_size(ph)
+            );
             let (xx, yy) = child.size();
             match orientation {
-                layout::Orientation::Horizontal => x += xx as i32,
-                layout::Orientation::Vertical => y += yy as i32,
+                layout::Orientation::Horizontal => {
+                    x += xx as i32;
+                    pw -= xx as i32;
+                }
+                layout::Orientation::Vertical => {
+                    y += yy as i32;
+                    ph -= yy as i32;
+                }
             }
         }
     }
