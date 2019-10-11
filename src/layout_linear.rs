@@ -47,7 +47,7 @@ impl MultiContainerInner for CocoaLinearLayout {
     fn len(&self) -> usize {
         self.children.len()
     }
-    fn set_child_to(&mut self, base: &mut MemberBase, mut index: usize, mut new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
+    fn set_child_to(&mut self, base: &mut MemberBase, index: usize, new: Box<dyn controls::Control>) -> Option<Box<dyn controls::Control>> {
         let mut old = self.remove_child_from(base, index);
 
         let this = unsafe { common::member_from_cocoa_id::<LinearLayout>(self.base.control).unwrap() };
@@ -78,12 +78,12 @@ impl MultiContainerInner for CocoaLinearLayout {
             match self.orientation {
                 layout::Orientation::Vertical => {
                     self.children.get_mut(index).unwrap().on_added_to_container(
-                        this, 0, ch, utils::coords_to_size(w as i32), utils::coords_to_size(h as i32 - ch)
+                        this, 0, ch, utils::coord_to_size(w as i32), utils::coord_to_size(h as i32 - ch)
                     );
                 },
                 layout::Orientation::Horizontal => {
                     self.children.get_mut(index).unwrap().on_added_to_container(
-                        this, cw, 0, utils::coords_to_size(w as i32 - cw), utils::coords_to_size(h as i32)
+                        this, cw, 0, utils::coord_to_size(w as i32 - cw), utils::coord_to_size(h as i32)
                     );
                 }
             }
@@ -187,7 +187,7 @@ impl ControlInner for CocoaLinearLayout {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         let orientation = self.orientation;
-        control.coords = Some((px, py));
+        control.coords = Some((x, y));
         let mut x = 0;
         let mut y = 0;
         let mut pw = pw as i32;
@@ -200,8 +200,8 @@ impl ControlInner for CocoaLinearLayout {
             }
             child.on_added_to_container(
                 self2, x, y, 
-                utils::coords_to_size(pw),
-                utils::coords_to_size(ph)
+                utils::coord_to_size(pw),
+                utils::coord_to_size(ph)
             );
             let (xx, yy) = child.size();
             match orientation {
@@ -304,22 +304,23 @@ impl Drawable for CocoaLinearLayout {
         let old_size = control.measured;
         let mut w = 0;
         let mut h = 0;
-        for child in self.children.as_mut_slice() {
-            let (cw, ch, _) = child.measure(max(0, parent_width as i32) as u16, max(0, parent_height as i32) as u16);
-            match orientation {
-                layout::Orientation::Horizontal => {
-                    w += cw;
-                    h = max(h, ch);
-                }
-                layout::Orientation::Vertical => {
-                    w = max(w, cw);
-                    h += ch;
-                }
-            }
-        }
         control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
+                for child in self.children.as_mut_slice() {
+                    match orientation {
+                        layout::Orientation::Horizontal => {
+                            let (cw, ch, _) = child.measure(max(0, parent_width as i32 - w as i32) as u16, max(0, parent_height as i32) as u16);
+                            w += cw;
+                            h = max(h, ch);
+                        }
+                        layout::Orientation::Vertical => {
+                            let (cw, ch, _) = child.measure(max(0, parent_width as i32) as u16, max(0, parent_height as i32 - h as i32) as u16);
+                            w = max(w, cw);
+                            h += ch;
+                        }
+                    }
+                }
                 let w = match control.layout.width {
                     layout::Size::Exact(w) => w,
                     layout::Size::MatchParent => parent_width,
