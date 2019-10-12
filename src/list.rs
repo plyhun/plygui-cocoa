@@ -6,6 +6,7 @@ lazy_static! {
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
         })
     };
+    static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
 }
 
 const BASE_CLASS: &str = "NSTableView";
@@ -35,6 +36,9 @@ impl AdapterViewInner for CocoaList {
         ));
         let selfptr = ll.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
+            let delegate: *mut Object = msg_send!(DELEGATE.0, new);
+            (&mut *delegate).set_ivar(common::IVAR, selfptr as *mut c_void);
+            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, setDelegate: delegate];
             (&mut *ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
         }
         ll
@@ -265,4 +269,23 @@ pub(crate) fn spawn() -> Box<dyn controls::Control> {
     List::with_orientation(layout::Orientation::Vertical).into_control()
 }
 */
+unsafe fn register_delegate() -> common::RefClass {
+    let superclass = Class::get("NSObject").unwrap();
+    let mut decl = ClassDecl::new("PlyguiListDelegate", superclass).unwrap();
+
+    decl.add_method(sel!(tableView:viewForTableColumn:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger) -> cocoa_id);
+    decl.add_ivar::<*mut c_void>(common::IVAR);
+
+    common::RefClass(decl.register())
+}
+extern "C" fn spawn_item(this: &mut Object, _: Sel, column: cocoa_id, row: NSInteger) -> cocoa_id {
+    println!("spawned {}", row);
+    ptr::null_mut()
+}
+/*(NSView *)tableView:(NSTableView *)tableView
+
+   viewForTableColumn:(NSTableColumn *)tableColumn
+
+                  row:(NSInteger)row*/
+
 default_impls_as!(List);
