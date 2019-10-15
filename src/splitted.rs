@@ -442,6 +442,7 @@ extern "C" fn splitter_resize_subviews(this: &mut Object, _: Sel, _: NSSize, _: 
     let sp = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };
     let sp2 = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };
     sp.as_inner_mut().as_inner_mut().as_inner_mut().update_children_layout(sp2.as_inner().base());
+    sp.draw(None);
 }
 extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
     unsafe {

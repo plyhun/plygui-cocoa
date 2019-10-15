@@ -4,9 +4,11 @@ lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         register_window_class("PlyguiList", BASE_CLASS, |decl| {
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+            decl.add_method(sel!(numberOfRowsInTableView:), datasource_len as extern "C" fn(&mut Object, Sel, cocoa_id) -> NSInteger);
+            //decl.add_method(sel!(tableView:objectValueForTableColumn:row:), get_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, NSInteger) -> cocoa_id);
+            decl.add_method(sel!(tableView:viewForTableColumn:row:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, NSInteger) -> cocoa_id);
         })
     };
-    static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
 }
 
 const BASE_CLASS: &str = "NSTableView";
@@ -36,10 +38,16 @@ impl AdapterViewInner for CocoaList {
         ));
         let selfptr = ll.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            let delegate: *mut Object = msg_send!(DELEGATE.0, new);
-            (&mut *delegate).set_ivar(common::IVAR, selfptr as *mut c_void);
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, setDelegate: delegate];
-            (&mut *ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
+            let control = ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control;
+            (&mut *control).set_ivar(common::IVAR, selfptr);
+            
+            let column: cocoa_id = msg_send![Class::get("NSTableColumn").unwrap(), alloc];
+            let ident = NSString::alloc(nil).init_str("_");
+            let column: cocoa_id = msg_send![column, initWithIdentifier:ident];
+            let () = msg_send![control, addTableColumn: column];
+            
+            let () = msg_send![control, setDelegate: control];
+            let () = msg_send![control, setDataSource: control];
         }
         ll
     }
@@ -123,7 +131,6 @@ impl ContainerInner for CocoaList {
 impl ControlInner for CocoaList {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, x: i32, y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
-        let mut x = x;
         let mut y = y;
 
         let self2 = unsafe { common::member_from_cocoa_id_mut::<List>(self.base.control).unwrap() };
@@ -132,7 +139,7 @@ impl ControlInner for CocoaList {
                 let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: child.native_id() as cocoa_id];
             }
             child.on_added_to_container(self2, x, y, control.measured.0, control.measured.1);
-            let (xx, yy) = child.size();
+            let (_, yy) = child.size();
             y += yy as i32;
         }
     }
@@ -205,8 +212,7 @@ impl MemberInner for CocoaList {}
 impl Drawable for CocoaList {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        let mut x = 0;
-        let mut y = 0;
+
 
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
@@ -269,23 +275,20 @@ pub(crate) fn spawn() -> Box<dyn controls::Control> {
     List::with_orientation(layout::Orientation::Vertical).into_control()
 }
 */
-unsafe fn register_delegate() -> common::RefClass {
-    let superclass = Class::get("NSObject").unwrap();
-    let mut decl = ClassDecl::new("PlyguiListDelegate", superclass).unwrap();
-
-    decl.add_method(sel!(tableView:viewForTableColumn:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger) -> cocoa_id);
-    decl.add_ivar::<*mut c_void>(common::IVAR);
-
-    common::RefClass(decl.register())
+extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSInteger {
+    unsafe {
+        let sp = common::member_from_cocoa_id::<List>(this).unwrap();
+        sp.as_inner().as_inner().base().adapter.len() as i64
+    }
 }
-extern "C" fn spawn_item(this: &mut Object, _: Sel, column: cocoa_id, row: NSInteger) -> cocoa_id {
-    println!("spawned {}", row);
-    ptr::null_mut()
+extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, _: cocoa_id, row: NSInteger) -> cocoa_id {
+    unsafe {
+        let sp = common::member_from_cocoa_id_mut::<List>(this).unwrap();
+        let sp2 = common::member_from_cocoa_id_mut::<List>(this).unwrap();
+        let view = sp.as_inner_mut().as_inner_mut().base_mut().adapter.spawn_item_view(row as usize, sp2);
+        sp.as_inner_mut().as_inner_mut().as_inner_mut().children.insert(row as usize, view);
+        sp.as_inner_mut().as_inner_mut().as_inner_mut().children[row as usize].native_id() as cocoa_id
+    }
 }
-/*(NSView *)tableView:(NSTableView *)tableView
-
-   viewForTableColumn:(NSTableColumn *)tableColumn
-
-                  row:(NSInteger)row*/
 
 default_impls_as!(List);
