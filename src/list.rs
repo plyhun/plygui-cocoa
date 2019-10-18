@@ -4,6 +4,7 @@ lazy_static! {
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         register_window_class("PlyguiList", BASE_CLASS, |decl| {
             decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+            decl.add_method(sel!(validateProposedFirstResponder:forEvent:), validate_proposed_first_responder as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
             decl.add_method(sel!(itemClicked:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(numberOfRowsInTableView:), datasource_len as extern "C" fn(&mut Object, Sel, cocoa_id) -> NSInteger);
             decl.add_method(sel!(tableView:heightOfRow:), get_item_height as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger) -> f64);
@@ -31,12 +32,7 @@ impl CocoaList {
         let mut item = adapter.adapter.spawn_item_view(i, this);
         item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
                 
-        let (_, yy) = item.size();
         self.items.insert(i, item);
-        
-        unsafe {
-            let () = msg_send![self.base.control, setRowHeight: yy as f64];
-        }
     }
     fn remove_item_inner(&mut self, base: &mut MemberBase, i: usize) {
         let this: &mut List = unsafe { utils::base_to_impl_mut(base) };
@@ -71,6 +67,7 @@ impl AdapterViewInner for CocoaList {
             
             let _ = msg_send![control, setTarget: control];
             let _ = msg_send![control, setAction: sel!(itemClicked:)];
+            let _ = msg_send![control, setFocusRingType:1 as NSUInteger];
         }
         ll
     }
@@ -88,6 +85,7 @@ impl AdapterViewInner for CocoaList {
         unsafe {
             let () = msg_send![self.base.control, reloadData];
         }
+        self.base.invalidate();
     }
 }
 
@@ -235,8 +233,6 @@ impl MemberInner for CocoaList {}
 impl Drawable for CocoaList {
     fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-
-
     }
     fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         use std::cmp::max;
@@ -293,13 +289,6 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
             sp.call_on_size(param.width as u16, param.height as u16);
         }
     }
-    /*
-    if let Some(sp) = unsafe { common::member_from_cocoa_id_mut::<List>(this) } {
-        unsafe { let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param]; }
-        sp.call_on_size(param.width as u16, param.height as u16)
-    }
-    
-    */
 }
 /*
 #[allow(dead_code)]
@@ -315,26 +304,17 @@ extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSIntege
 }
 extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, _: cocoa_id, row: NSInteger) -> cocoa_id {
     let sp = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
-    println!("spawned {}", row);
     unsafe { sp.as_inner_mut().as_inner_mut().as_inner_mut().items[row as usize].native_id() as cocoa_id }
 }
 extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, row: NSInteger) -> f64 {
     let sp = unsafe { common::member_from_cocoa_id::<List>(this).unwrap() };
-    /*if let Some(item) = sp.as_inner().as_inner().as_inner().items.get(row as usize) {
-        let (_, h) = item.size();
-        h as f64
-    } else {
-        1.0
-    }*/
     let (_, h) = sp.as_inner().as_inner().as_inner().items[row as usize].size();
-    println!("height {} = {}", row, h);
     h as f64
 }
 extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
     let sp = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
     let sp2 = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
     let i: NSInteger = unsafe { msg_send![this, clickedRow] };
-    println!("clicked {}", i);
     if i < 0 {
         return;
     }
@@ -343,6 +323,9 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
         let sp2 = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
         (callback.as_mut())(sp2, i as usize, item_view.as_mut());
     }
+}
+extern "C" fn validate_proposed_first_responder(_: &mut Object, _: Sel, responder: cocoa_id, _: cocoa_id) -> BOOL {
+    unsafe { msg_send![responder, isKindOfClass: class!(NSButton)] }
 }
 
 default_impls_as!(List);

@@ -11,7 +11,7 @@ pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 pub use block::{Block, ConcreteBlock, RcBlock};
 pub use cocoa::appkit::{NSMenu, NSMenuItem, NSView};
 pub use cocoa::base::{id as cocoa_id, nil};
-pub use cocoa::foundation::{NSInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
+pub use cocoa::foundation::{NSInteger, NSUInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
 pub use objc::declare::ClassDecl;
 pub use objc::runtime::{class_copyIvarList, Class, Ivar, Object, Sel, BOOL, NO, YES};
 
