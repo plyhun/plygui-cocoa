@@ -2,7 +2,7 @@ use crate::common::{self, *};
 
 pub use std::os::raw::c_char;
 
-const INNER_PADDING_H: i32 = 7; // TODO: WHY???
+const INNER_PADDING_H: i32 = 8; // TODO: WHY???
 const INNER_PADDING_V: i32 = 8; // TODO: WHY???
 
 lazy_static! {
@@ -183,9 +183,6 @@ impl ControlInner for CocoaFrame {
 
         if let Some(ref mut child) = self.child {
             let frame2 = unsafe { common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap() };
-            unsafe {
-                let () = msg_send![frame2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview:child.native_id() as cocoa_id];
-            }
             let (pw, ph) = control.measured;
             child.on_added_to_container(
                 frame2,

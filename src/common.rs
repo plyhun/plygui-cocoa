@@ -9,7 +9,7 @@ pub use std::sync::Arc;
 pub use std::{any, cmp, ffi, marker, mem, ptr, slice, str, sync::mpsc};
 
 pub use block::{Block, ConcreteBlock, RcBlock};
-pub use cocoa::appkit::{NSMenu, NSMenuItem, NSView};
+pub use cocoa::appkit::{NSMenu, NSMenuItem, NSView, NSEvent, NSEventType};
 pub use cocoa::base::{id as cocoa_id, nil};
 pub use cocoa::foundation::{NSInteger, NSUInteger, NSPoint, NSRange, NSRect, NSSize, NSString};
 pub use objc::declare::ClassDecl;
@@ -116,6 +116,7 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 let mut frame: NSRect = self.frame();
                 frame.size = NSSize::new(width as f64, height as f64);
                 frame.origin = NSPoint::new(x as f64, (ph as i32 - y - height as i32) as f64);
+                //frame.origin = NSPoint::new(x as f64, y as f64);
                 let () = msg_send![self.control, setFrame: frame];
             }
         }
@@ -281,6 +282,7 @@ where
 
     decl.add_method(sel!(translatesAutoresizingMaskIntoConstraints:), class_autoresizing as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
     decl.add_method(sel!(requiresConstraintBasedLayout:), class_constraint_layout as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
+    decl.add_method(sel!(isFlipped:), class_is_flipped as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
 
     f(&mut decl);
 
@@ -380,5 +382,8 @@ extern "C" fn class_autoresizing(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
     NO
 }
 extern "C" fn class_constraint_layout(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
+    YES
+}
+extern "C" fn class_is_flipped(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
     YES
 }
