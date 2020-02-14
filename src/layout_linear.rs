@@ -21,8 +21,8 @@ pub struct CocoaLinearLayout {
 
 impl<O: controls::LinearLayout> NewLinearLayoutInner<O> for CocoaLinearLayout {
     fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, orientation: layout::Orientation) -> Self {
-        let mut ll = CocoaLinearLayout {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        let ll = CocoaLinearLayout {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             orientation: orientation,
 
             children: Vec::new(),
@@ -72,7 +72,7 @@ impl MultiContainerInner for CocoaLinearLayout {
             let () = msg_send![self.base.control, addSubview: new.native_id() as cocoa_id];
         }
         self.children.insert(index, new);
-        let (w, h) = self.base.size(this.as_inner().base());
+        let (w, h) = self.base.size(&this.inner().base);
         
         let (cw, ch) = {
             let mut w = 0;
@@ -183,7 +183,7 @@ impl ContainerInner for CocoaLinearLayout {
 }
 
 impl HasOrientationInner for CocoaLinearLayout {
-    fn orientation(&self, _: &mut MemberBase) -> layout::Orientation {
+    fn orientation(&self, _: &MemberBase) -> layout::Orientation {
         self.orientation
     }
     fn set_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
@@ -207,7 +207,7 @@ impl ControlInner for CocoaLinearLayout {
         let self2 = unsafe { common::member_from_cocoa_id_mut::<LinearLayout>(self.base.control).unwrap() };
         for ref mut child in self.children.as_mut_slice() {
             unsafe {
-                let () = msg_send![self2.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: child.native_id() as cocoa_id];
+                let () = msg_send![self2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, addSubview: child.native_id() as cocoa_id];
             }
             child.on_added_to_container(
                 self2, x, y, 
@@ -355,10 +355,16 @@ impl Spawnable for CocoaLinearLayout {
         Self::with_orientation(layout::Orientation::Vertical).into_control()
     }
 }
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
+        (b.inner().inner().inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::LinearLayout>(this: &mut LinearLayout, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
     }
 }

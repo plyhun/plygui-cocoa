@@ -90,8 +90,6 @@ impl ApplicationInner for CocoaApplication {
         }
     }
     fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        use plygui_api::controls::HasNativeId;
-
         let w = crate::window::CocoaWindow::with_params(title, size, menu);
         unsafe {
             self.windows.push(w.native_id() as cocoa_id);

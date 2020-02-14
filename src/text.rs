@@ -21,8 +21,8 @@ pub struct CocoaText {
 
 impl<O: controls::Text> NewTextInner<O> for CocoaText {
     fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
-        let mut tx = CocoaText {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        let tx = CocoaText {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
@@ -174,11 +174,16 @@ impl Spawnable for CocoaText {
         Self::with_text("").into_control()
     }
 }
-
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Text>(this).unwrap();
-        let () = msg_send![super(sp.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<Text>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<Text>(this).unwrap();
+        (b.inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::Text>(this: &mut Text, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
     }
 }

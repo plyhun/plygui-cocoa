@@ -25,8 +25,8 @@ pub struct CocoaFrame {
 }
 impl<O: controls::Frame> NewFrameInner<O> for CocoaFrame {
     fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
-        let mut fr = CocoaFrame {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        let fr = CocoaFrame {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             label_padding: (0, 0),
             child: None,
         };
@@ -76,7 +76,7 @@ impl SingleContainerInner for CocoaFrame {
                 (&mut *child_id).set_ivar(common::IVAR_PARENT, self.base.control as *mut c_void);
                 let () = msg_send![self.base.control, addSubview: child_id];
                 let frame2 = common::member_from_cocoa_id_mut::<Frame>(self.base.control).unwrap();
-                let (pw, ph) = frame2.as_inner().base().measured;
+                let (pw, ph) = frame2.inner().base.measured;
                 if self.base.root().is_some() {
                     child.on_added_to_container(
                         frame2,
@@ -313,11 +313,16 @@ impl Spawnable for CocoaFrame {
         Self::with_label("").into_control()
     }
 }
-
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16);
+        let b = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
+        (b.inner().inner().inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::Frame>(this: &mut Frame, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16);
     }
 }

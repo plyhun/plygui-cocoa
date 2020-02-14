@@ -43,7 +43,7 @@ impl Drop for CocoaImage {
 impl<O: controls::Image> NewImageInner<O> for CocoaImage {
     fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, content: image::DynamicImage) -> Self {
         let mut i = CocoaImage {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             img: nil,
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
@@ -222,11 +222,16 @@ impl Spawnable for CocoaImage {
         Self::with_content(image::DynamicImage::new_luma8(0, 0)).into_control()
     }
 }
-
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Image>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<Image>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<Image>(this).unwrap();
+        (b.inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::Image>(this: &mut Image, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
     }
 }

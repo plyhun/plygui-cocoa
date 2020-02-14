@@ -20,8 +20,8 @@ pub struct CocoaProgressBar {
 }
 impl<O: controls::ProgressBar> NewProgressBarInner<O> for CocoaProgressBar {
     fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
-        let mut pb = CocoaProgressBar {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        let pb = CocoaProgressBar {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             skip_callbacks: false,
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
@@ -190,11 +190,16 @@ impl Spawnable for CocoaProgressBar {
         Self::with_progress(types::Progress::None).into_control()
     }
 }
-
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<ProgressBar>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<ProgressBar>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<ProgressBar>(this).unwrap();
+        (b.inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::ProgressBar>(this: &mut ProgressBar, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
     }
 }

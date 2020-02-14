@@ -77,7 +77,7 @@ impl MessageInner for CocoaMessage {
             ));
 
             let selfptr = alert.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
-            (&mut *alert.as_inner_mut().control).set_ivar(common::IVAR, selfptr);
+            (&mut *alert.inner_mut().inner_mut().control).set_ivar(common::IVAR, selfptr);
 
             alert
         }
@@ -148,7 +148,7 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
             let title = msg_send![title, UTF8String];
             ffi::CString::from_raw(title).into_string().unwrap()
         };
-        alert.as_inner_mut().actions.iter_mut().filter(|a| a.0 == title).for_each(|a| {
+        alert.inner_mut().inner_mut().actions.iter_mut().filter(|a| a.0 == title).for_each(|a| {
             let alert2 = common::member_from_cocoa_id_mut::<Message>(this).unwrap();
             (a.1.as_mut())(alert2);
             let _ = msg_send![a.2, performSelector:a.3 withObject:param];

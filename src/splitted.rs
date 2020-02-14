@@ -22,10 +22,10 @@ pub struct CocoaSplitted {
 }
 
 impl CocoaSplitted {
-    fn children_sizes(&self, control: &ControlBase) -> (u16, u16) {
+    fn children_sizes(&self, member: &MemberBase, control: &ControlBase) -> (u16, u16) {
         let (w, h) = self.base.size(control);
         let splitter: f32 = unsafe { msg_send![self.base.control, dividerThickness] };
-        let target = match self.layout_orientation() {
+        let target = match self.orientation(member) {
             layout::Orientation::Horizontal => w,
             layout::Orientation::Vertical => h,
         };
@@ -34,17 +34,17 @@ impl CocoaSplitted {
             utils::coord_to_size((target as f32 * (1.0 - self.splitter)) as i32 - (splitter as i32) - PADDING),
         )
     }
-    fn update_splitter(&mut self, control: &ControlBase) {
-        let orientation = self.layout_orientation();
+    fn update_splitter(&mut self, member: &MemberBase, control: &ControlBase) {
+        let orientation = self.orientation(member);
         let () = match orientation {
             layout::Orientation::Horizontal => unsafe { msg_send![self.base.control, setPosition:(control.measured.0 as f32 * self.splitter) ofDividerAtIndex:0] },
             layout::Orientation::Vertical => unsafe { msg_send![self.base.control, setPosition:(control.measured.1 as f32 * self.splitter) ofDividerAtIndex:0] },
         };
     }
-    fn draw_children(&mut self, control: &ControlBase) {
+    fn draw_children(&mut self, member: &MemberBase, control: &ControlBase) {
         let splitter: f32 = unsafe { msg_send![self.base.control, dividerThickness] };
-        let o = self.layout_orientation();
-        let (first, _) = self.children_sizes(control);
+        let o = self.orientation(member);
+        let (first, _) = self.children_sizes(member, control);
         let (pw, ph) = control.measured;
         let (fw, fh) = self.first.size();
         let (sw, sh) = self.second.size();
@@ -60,10 +60,10 @@ impl CocoaSplitted {
             }
         }
     }
-    fn update_children_layout(&mut self, base: &ControlBase) -> (u16, u16) {
-        let orientation = self.layout_orientation();
-        let (first_size, second_size) = self.children_sizes(base);
-        let (width, height) = base.measured;
+    fn update_children_layout(&mut self, member: &MemberBase, control: &ControlBase) -> (u16, u16) {
+        let orientation = self.orientation(member);
+        let (first_size, second_size) = self.children_sizes(member, control);
+        let (width, height) = control.measured;
         let mut w = 0;
         let mut h = 0;
         for (size, child) in [(first_size, self.first.as_mut()), (second_size, self.second.as_mut())].iter_mut() {
@@ -86,14 +86,14 @@ impl CocoaSplitted {
 
 impl<O: controls::Splitted> NewSplittedInner<O> for CocoaSplitted {
     fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Self {
-        let mut sp = CocoaSplitted {
-            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        let sp = CocoaSplitted {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             splitter: defaults::SPLITTED_POSITION,
             first: first,
             second: second,
         };
         unsafe {
-            let selfptr = ptr as *mut Splitted;
+            let selfptr = ptr as *mut _ as *mut Splitted;
             (&mut *sp.base.control).set_ivar(common::IVAR, selfptr as *mut c_void);
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(common::IVAR, selfptr as *mut c_void);
@@ -128,10 +128,10 @@ impl SplittedInner for CocoaSplitted {
         }
     }
     fn set_splitter(&mut self, base: &mut MemberBase, pos: f32) {
-        let (_, c) = Splitted::control_base_parts_mut(base);
+        let (m, c, _) = unsafe { Splitted::control_base_parts_mut(base) };
         let pos = pos % 1.0;
         self.splitter = pos;
-        self.update_splitter(c);
+        self.update_splitter(m, c);
         self.base.invalidate();
     }
     fn splitter(&self) -> f32 {
@@ -289,8 +289,8 @@ impl HasOrientationInner for CocoaSplitted {
     fn orientation(&self, _: &MemberBase) -> layout::Orientation {
         vertical_to_orientation(unsafe { msg_send![self.base.control, isVertical] })
     }
-    fn set_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
-        if orientation != self.layout_orientation() {
+    fn set_orientation(&mut self, base: &mut MemberBase, orientation: layout::Orientation) {
+        if orientation != self.orientation(base) {
             unsafe {
                 let () = msg_send![self.base.control, setVertical: orientation_to_vertical(orientation)];
             }
@@ -302,22 +302,23 @@ impl HasOrientationInner for CocoaSplitted {
 impl ControlInner for CocoaSplitted {
     fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _: i32, _: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
-        let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
-        let (first_size, second_size) = self.children_sizes(control);
-        match self.layout_orientation() {
+        let (first_size, second_size) = self.children_sizes(member, control);
+        match self.orientation(member) {
             layout::Orientation::Horizontal => {
                 let h = utils::coord_to_size(ph as i32);
+                let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
                 self.first.on_added_to_container(self2, 0, 0, first_size, h);
                 self.second.on_added_to_container(self2, first_size as i32, 0, second_size, h);
             }
             layout::Orientation::Vertical => {
                 let w = utils::coord_to_size(pw as i32);
+                let self2: &mut Splitted = unsafe { utils::base_to_impl_mut(member) };
                 self.first.on_added_to_container(self2, 0, 0, w, first_size);
                 self.second.on_added_to_container(self2, 0, first_size as i32, w, second_size);
             }
         }
-        self.update_children_layout(control);
-        self.draw_children(control);
+        self.update_children_layout(member, control);
+        self.draw_children(member, control);
     }
     fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         let self2: &Splitted = unsafe { common::member_from_cocoa_id(self.base.control).unwrap() };
@@ -352,8 +353,8 @@ impl ControlInner for CocoaSplitted {
 
 impl HasLayoutInner for CocoaSplitted {
     fn on_layout_changed(&mut self, base: &mut MemberBase) {
-        let this = unsafe { utils::base_to_impl::<Splitted>(base) };
-        self.update_splitter(this.as_inner().base());
+        let (m, c, _) = unsafe { Splitted::control_base_parts_mut(base) };
+        self.update_splitter(m, c);
         self.base.invalidate();
     }
 }
@@ -382,16 +383,16 @@ impl HasVisibilityInner for CocoaSplitted {
 impl MemberInner for CocoaSplitted {}
 
 impl Drawable for CocoaSplitted {
-    fn draw(&mut self, _member: &mut MemberBase, control: &mut ControlBase) {
+    fn draw(&mut self, member: &mut MemberBase, control: &mut ControlBase) {
         self.base.draw(control.coords, control.measured);
-        self.draw_children(control);
+        self.draw_children(member, control);
     }
-    fn measure(&mut self, _member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
+    fn measure(&mut self, member: &mut MemberBase, control: &mut ControlBase, parent_width: u16, parent_height: u16) -> (u16, u16, bool) {
         let old_size = control.measured;
         control.measured = match control.visibility {
             types::Visibility::Gone => (0, 0),
             _ => {
-                let (w, h) = self.update_children_layout(control);
+                let (w, h) = self.update_children_layout(member, control);
                 let w = match control.layout.width {
                     layout::Size::Exact(w) => w,
                     layout::Size::MatchParent => parent_width,
@@ -446,19 +447,20 @@ extern "C" fn adjust_subview_size(_: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
 extern "C" fn splitter_resize_subviews(this: &mut Object, _: Sel, _: NSSize, _: cocoa_id) {
     let sp = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };
     let sp2 = unsafe { common::member_from_cocoa_id_mut::<Splitted>(this).unwrap() };
-    sp.as_inner_mut().as_inner_mut().as_inner_mut().update_children_layout(sp2.as_inner().base());
-    sp.draw(None);
+    let (m, c, _) = sp2.as_control_parts_mut();
+    sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().update_children_layout(m, c);
+    OuterDrawable::draw(sp, None);
 }
 extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
-        let subviews: cocoa_id = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, subviews];
+        let subviews: cocoa_id = msg_send![sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, subviews];
         let first: cocoa_id = msg_send![subviews, objectAtIndex:0];
         let first: NSRect = msg_send![first, frame];
         let second: cocoa_id = msg_send![subviews, objectAtIndex:1];
         let second: NSRect = msg_send![second, frame];
-        let size: NSRect = msg_send![sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, frame];
-        let o = sp.as_inner().as_inner().as_inner().layout_orientation();
+        let size: NSRect = msg_send![sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, frame];
+        let o = controls::HasOrientation::orientation(sp);
         let mut splitter_first = match o {
             layout::Orientation::Horizontal => (first.size.width / size.size.width),
             layout::Orientation::Vertical => (first.size.height / size.size.height),
@@ -472,29 +474,35 @@ extern "C" fn splitter_moved(this: &mut Object, _: Sel, _: cocoa_id) {
         }
         let bias = (1.0 - (splitter_first + splitter_second)) / 2.0;
         splitter_first += bias;
-        let old_splitter = sp.as_inner_mut().as_inner_mut().as_inner_mut().splitter;
+        let old_splitter = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().splitter;
         if (old_splitter - splitter_first) != 0.0 {
             sp.set_skip_draw(true);
             {
                 let base = common::member_base_from_cocoa_id_mut(this).unwrap();
-                let (_, base) = Splitted::control_base_parts_mut(base);
-                let sp = sp.as_inner_mut().as_inner_mut().as_inner_mut();
+                let (m, c, _) = Splitted::control_base_parts_mut(base);
+                let sp = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
                 // On first appearance NSSplitView loads its own default divider position, ignoring the sizing of the second child.
                 // We can use it to distinguish the initial appearance from all the following, which have to control our splitter position.
                 if second.size.width >= 1.0 && second.size.height >= 1.0 {
                     sp.splitter = splitter_first;
                 } 
-                sp.update_children_layout(base);
-                sp.draw_children(base);
+                sp.update_children_layout(m, c);
+                sp.draw_children(m, c);
             }
             sp.set_skip_draw(false);
         }
     }
 }
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<Splitted>(this).unwrap();
+        (b.inner().inner().inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::Splitted>(this: &mut Splitted, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
     }
 }

@@ -30,7 +30,7 @@ pub struct CocoaList {
 
 impl CocoaList {
     fn add_item_inner(&mut self, base: &mut MemberBase, i: usize) {
-        let (member, control, adapter) = List::adapter_base_parts_mut(base);
+        let (member, control, adapter, _) = unsafe { List::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let this: &mut List = unsafe { utils::base_to_impl_mut(member) };
         
@@ -47,15 +47,16 @@ impl CocoaList {
 
 impl<O: controls::List> NewListInner<O> for CocoaList {
     fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
-        let base = common::CocoaControlBase::with_params(*WINDOW_CLASS);
+        let base = common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>);
         let base_bounds: NSRect = unsafe { msg_send![base.control, bounds] };
-        let mut li = CocoaList {
+        let li = CocoaList {
             base: base,
             table: unsafe {
                 let mut control: cocoa_id = msg_send![WINDOW_CLASS_INNER.0, alloc];
                 control = msg_send![control, initWithFrame: base_bounds];
                 control
             },
+            on_item_click: None,
             items: Vec::new(),
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
@@ -204,7 +205,7 @@ impl ControlInner for CocoaList {
         self.measure(member, control, pw, ph);
         control.coords = Some((x, y));
         
-        let (member, _, adapter) = List::adapter_base_parts_mut(member);
+        let (member, _, adapter, _) = unsafe { List::adapter_base_parts_mut(member) };
 
         for i in 0..adapter.adapter.len() {
             self.add_item_inner(member, i);
@@ -322,12 +323,18 @@ impl Drop for CocoaList {
     }
 }
 
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<List>(this).unwrap();
+        let b = common::member_from_cocoa_id_mut::<List>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<List>(this).unwrap();
+        (b.inner().inner().inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn set_frame_size_inner<O: controls::List>(this: &mut List, _: Sel, param: NSSize) {
+    unsafe {
         if let Some(cls) = Class::get("NSScrollView") {
-            let () = msg_send![super(sp.as_inner_mut().as_inner_mut().as_inner_mut().base.control, cls), setFrameSize: param];
-            sp.call_on_size(param.width as u16, param.height as u16);
+            let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().base.control, cls), setFrameSize: param];
+            this.call_on_size::<O>(param.width as u16, param.height as u16);
         }
     }
 }
@@ -340,16 +347,16 @@ impl Spawnable for CocoaList {
 extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSInteger {
     unsafe {
         let sp = common::member_from_cocoa_id::<List>(this).unwrap();
-        sp.as_inner().as_inner().base().adapter.len() as i64
+        sp.inner().inner().inner().base.adapter.len() as i64
     }
 }
 extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, _: cocoa_id, row: NSInteger) -> cocoa_id {
     let sp = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
-    unsafe { sp.as_inner_mut().as_inner_mut().as_inner_mut().items[row as usize].native_id() as cocoa_id }
+    unsafe { sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items[row as usize].native_id() as cocoa_id }
 }
 extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, row: NSInteger) -> f64 {
     let sp = unsafe { common::member_from_cocoa_id::<List>(this).unwrap() };
-    let (_, h) = sp.as_inner().as_inner().as_inner().items[row as usize].size();
+    let (_, h) = sp.inner().inner().inner().inner().inner().items[row as usize].size();
     h as f64
 }
 extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
@@ -359,8 +366,8 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
     if i < 0 {
         return;
     }
-    let item_view = sp.as_inner_mut().as_inner_mut().as_inner_mut().items.get_mut(i as usize).unwrap();
-    if let Some(ref mut callback) = sp2.as_inner_mut().as_inner_mut().base_mut().on_item_click {
+    let item_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
+    if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
         let sp2 = unsafe { common::member_from_cocoa_id_mut::<List>(this).unwrap() };
         (callback.as_mut())(sp2, i as usize, item_view.as_mut());
     }

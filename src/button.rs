@@ -29,7 +29,7 @@ pub struct CocoaButton {
 
 impl<O: controls::Button> NewButtonInner<O> for CocoaButton {
     fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
-        let mut b = CocoaButton {
+        let b = CocoaButton {
             base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
             h_left_clicked: None,
             h_right_clicked: None,
