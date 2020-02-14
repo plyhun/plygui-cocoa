@@ -66,7 +66,7 @@ impl HasImageInner for CocoaTray {
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
         unsafe {
             let thickness: f64 = msg_send![NSStatusBar::systemStatusBar(nil), thickness];
-            let i = i.resize(thickness as u32, thickness as u32, image::FilterType::Lanczos3);
+            let i = i.resize(thickness as u32, thickness as u32, image::imageops::FilterType::Lanczos3);
             
         	let img = common::image_to_native(&i);
         	let btn: cocoa_id = msg_send![self.tray, button];

@@ -84,7 +84,7 @@ impl ApplicationInner for CocoaApplication {
             let () = msg_send![app.inner_mut().app, setDelegate: app.inner_mut().delegate];
 
             let selfptr = selfptr as usize;
-            Queue::main().r#async(move || application_frame_runner(selfptr));
+            Queue::main().exec_async(move || application_frame_runner(selfptr));
 
             app
         }
@@ -380,7 +380,7 @@ fn application_frame_runner(selfptr: usize) {
     unsafe {
         let () = msg_send![class!(NSThread), sleepForTimeInterval:(1.0 as f64 / app.inner().sleep as f64)];
     }
-    Queue::main().r#async(move || application_frame_runner(selfptr));
+    Queue::main().exec_async(move || application_frame_runner(selfptr));
 }
 
 unsafe fn from_cocoa_id_mut<'a>(id: cocoa_id) -> Option<&'a mut Application> {

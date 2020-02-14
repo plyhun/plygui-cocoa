@@ -71,19 +71,19 @@ impl<O: controls::List> NewListInner<O> for CocoaList {
             let column: cocoa_id = msg_send![column, initWithIdentifier:ident];
             let () = msg_send![table, addTableColumn: column];
             
-            let _ = msg_send![table, setTarget: table];
-            let _ = msg_send![table, setAction: sel!(itemClicked:)];
-            let _ = msg_send![table, setFocusRingType:1 as NSUInteger];
-            	let _ = msg_send![table, setHeaderView: nil];
+            let () = msg_send![table, setTarget: table];
+            let () = msg_send![table, setAction: sel!(itemClicked:)];
+            let () = msg_send![table, setFocusRingType:1 as NSUInteger];
+            	let () = msg_send![table, setHeaderView: nil];
         	
-            let _ = msg_send![control, setAutohidesScrollers: NO];
-            let _ = msg_send![control, setHasHorizontalScroller: NO];
-            let _ = msg_send![control, setHasVerticalScroller: YES];            
-            let _ = msg_send![control, setPostsFrameChangedNotifications: YES];
-            let _ = msg_send![control, setAutoresizesSubviews:YES];
-            let _ = msg_send![control, setAutoresizingMask: NSViewHeightSizable];
+            let () = msg_send![control, setAutohidesScrollers: NO];
+            let () = msg_send![control, setHasHorizontalScroller: NO];
+            let () = msg_send![control, setHasVerticalScroller: YES];            
+            let () = msg_send![control, setPostsFrameChangedNotifications: YES];
+            let () = msg_send![control, setAutoresizesSubviews:YES];
+            let () = msg_send![control, setAutoresizingMask: NSViewHeightSizable];
             
-            let _ = msg_send![control, setDocumentView: table];
+            let () = msg_send![control, setDocumentView: table];
         }
         li
     }

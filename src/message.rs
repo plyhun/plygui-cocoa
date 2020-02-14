@@ -30,16 +30,16 @@ impl MessageInner for CocoaMessage {
                 types::MessageSeverity::Warning => 0,
                 types::MessageSeverity::Alert => 2,
             };
-            let _ = msg_send![alert, setAlertStyle: style];
+            let () = msg_send![alert, setAlertStyle: style];
 
-            let _ = match content {
+            let () = match content {
                 types::TextContent::Plain(text) => {
                     let text = NSString::alloc(cocoa::base::nil).init_str(&text);
                     msg_send![alert, setMessageText: text]
                 }
                 types::TextContent::LabelDescription(label, description) => {
                     let text = NSString::alloc(cocoa::base::nil).init_str(&description);
-                    let _ = msg_send![alert, setInformativeText: text];
+                    let () = msg_send![alert, setInformativeText: text];
                     let text = NSString::alloc(cocoa::base::nil).init_str(&label);
                     msg_send![alert, setMessageText: text]
                 }
@@ -50,13 +50,13 @@ impl MessageInner for CocoaMessage {
                 .enumerate()
                 .map(|(index, (name, action))| {
                     let text = NSString::alloc(cocoa::base::nil).init_str(&name);
-                    let _ = msg_send![alert, addButtonWithTitle: text];
+                    let () = msg_send![alert, addButtonWithTitle: text];
                     let buttons: cocoa_id = msg_send![alert, buttons];
                     let button: cocoa_id = msg_send![buttons, objectAtIndex: index];
                     let old_target: cocoa_id = msg_send![button, target];
                     let old_sel: Sel = msg_send![button, action];
-                    let _ = msg_send![button, setTarget: alert];
-                    let _ = msg_send![button, setAction: sel!(anyButtonPressed:)];
+                    let () = msg_send![button, setTarget: alert];
+                    let () = msg_send![button, setAction: sel!(anyButtonPressed:)];
                     (name, action, old_target, old_sel)
                 })
                 .collect::<Vec<_>>();
@@ -88,12 +88,12 @@ impl MessageInner for CocoaMessage {
             _ => unsafe {
                 let completion_handler = ConcreteBlock::new(move |return_code: NSInteger| {
                     let app: cocoa_id = msg_send![class!(NSApplication), sharedApplication];
-                    msg_send![app, stopModalWithCode: return_code];
+                    let () = msg_send![app, stopModalWithCode: return_code];
                 });
                 let completion_handler = completion_handler.copy();
                 let completion_handler: &Block<(NSInteger,), ()> = &completion_handler;
 
-                let _ = msg_send![self.control, beginSheetModalForWindow:self.parent completionHandler:completion_handler];
+                let () = msg_send![self.control, beginSheetModalForWindow:self.parent completionHandler:completion_handler];
                 let app: cocoa_id = msg_send![class!(NSApplication), sharedApplication];
                 let window: cocoa_id = msg_send![self.control, window];
                 msg_send![app, runModalForWindow: window]
@@ -151,7 +151,7 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
         alert.inner_mut().inner_mut().actions.iter_mut().filter(|a| a.0 == title).for_each(|a| {
             let alert2 = common::member_from_cocoa_id_mut::<Message>(this).unwrap();
             (a.1.as_mut())(alert2);
-            let _ = msg_send![a.2, performSelector:a.3 withObject:param];
+            let () = msg_send![a.2, performSelector:a.3 withObject:param];
         });
 
         mem::forget(title);
