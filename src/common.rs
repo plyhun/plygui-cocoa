@@ -45,20 +45,26 @@ impl From<CocoaId> for usize {
         a.0 as usize
     }
 }
-impl NativeId for CocoaId {}
+impl NativeId for CocoaId {
+    unsafe fn from_outer(arg: usize) -> Self {
+        CocoaId(arg as cocoa_id)
+    }
+}
 
 pub const IVAR: &str = "plyguiIvar";
 pub const IVAR_PARENT: &str = "plyguiIvarParent";
 pub const DEFAULT_PADDING: i32 = 6;
 
+pub type ResizeHandler<O: controls::Control> = extern "C" fn(this: &mut O, _: Sel, param: NSSize);
+
 #[repr(C)]
 pub struct CocoaControlBase<T: controls::Control + Sized + 'static> {
     pub control: cocoa_id,
-    _marker: marker::PhantomData<T>,
+    pub resize_handler: ResizeHandler<T>,
 }
 
 impl<T: controls::Control + Sized> CocoaControlBase<T> {
-    pub fn with_params(class: RefClass) -> CocoaControlBase<T> {
+    pub fn with_params(class: RefClass, resize_handler: ResizeHandler<T>) -> CocoaControlBase<T> {
         CocoaControlBase {
             control: unsafe {
                 let rect = NSRect::new(NSPoint::new(0f64, 0f64), NSSize::new(0f64, 0f64));
@@ -66,7 +72,7 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
                 control = msg_send![control, initWithFrame: rect];
                 control
             },
-            _marker: marker::PhantomData,
+            resize_handler: resize_handler,
         }
     }
     pub fn size(&self, control: &ControlBase) -> (u16, u16) {

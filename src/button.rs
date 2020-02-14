@@ -16,7 +16,7 @@ lazy_static! {
 
 const BASE_CLASS: &str = "NSButton";
 
-pub type Button = Member<Control<CocoaButton>>;
+pub type Button = AMember<AControl<AButton<CocoaButton>>>;
 
 #[repr(C)]
 pub struct CocoaButton {
@@ -27,29 +27,38 @@ pub struct CocoaButton {
     skip_callbacks: bool,
 }
 
-impl ButtonInner for CocoaButton {
-    fn with_label(label: &str) -> Box<Button> {
-        use plygui_api::controls::HasLabel;
-
-        let mut b = Box::new(Member::with_inner(
-            Control::with_inner(
-                CocoaButton {
-                    base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                    h_left_clicked: None,
-                    h_right_clicked: None,
-                    skip_callbacks: false,
-                },
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+impl<O: controls::Button> NewButtonInner<O> for CocoaButton {
+    fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
+        let mut b = CocoaButton {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>),
+            h_left_clicked: None,
+            h_right_clicked: None,
+            skip_callbacks: false,
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle];
+            (&mut *b.base.control).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![b.base.control, setBezelStyle: NSBezelStyle::NSSmallSquareBezelStyle];
         }
-        b.set_label(label.into());
         b
+    }
+}
+
+impl ButtonInner for CocoaButton {
+    fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Button> {
+        let mut b: Box<mem::MaybeUninit<Button>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
+            AControl::with_inner(
+                AButton::with_inner(
+                    <Self as NewButtonInner<Button>>::with_uninit(b.as_mut())
+                )
+            ),
+        );
+        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -181,18 +190,18 @@ impl Drawable for CocoaButton {
         self.base.invalidate();
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Button::with_label("").into_control()
+impl Spawnable for CocoaButton {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_label("").into_control()
+    }
 }
 
 extern "C" fn button_left_click(this: &mut Object, _: Sel, param: cocoa_id) {
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
-        let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
-        if !button.as_inner().as_inner().skip_callbacks {
-            if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_left_clicked {
+        let () = msg_send![super(button.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), mouseDown: param];
+        if !button.inner().inner().inner().skip_callbacks {
+            if let Some(ref mut cb) = button.inner_mut().inner_mut().inner_mut().h_left_clicked {
             let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
                 (cb.as_mut())(b2);
             } 
@@ -203,18 +212,23 @@ extern "C" fn button_right_click(this: &mut Object, _: Sel, param: cocoa_id) {
     //println!("right!");
     unsafe {
         let button = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
-        if let Some(ref mut cb) = button.as_inner_mut().as_inner_mut().h_right_clicked {
+        if let Some(ref mut cb) = button.inner_mut().inner_mut().inner_mut().h_right_clicked {
             let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
             (cb.as_mut())(b2);
         }
-        let () = msg_send![super(button.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
+        let () = msg_send![super(button.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), rightMouseDown: param];
     }
 }
-extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
     unsafe {
-        let sp = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
-        sp.call_on_size(param.width as u16, param.height as u16)
+        let b = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
+        let b2 = common::member_from_cocoa_id_mut::<Button>(this).unwrap();
+        (b.inner().inner().inner().base.resize_handler)(b2, sel, param)
     }
 }
-default_impls_as!(Button);
+extern "C" fn set_frame_size_inner<O: controls::Button>(this: &mut Button, _: Sel, param: NSSize) {
+    unsafe {
+        let () = msg_send![super(this.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        this.call_on_size::<O>(param.width as u16, param.height as u16)
+    }
+}

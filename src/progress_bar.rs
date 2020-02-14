@@ -10,7 +10,7 @@ lazy_static! {
 
 const BASE_CLASS: &str = "NSProgressIndicator";
 
-pub type ProgressBar = Member<Control<CocoaProgressBar>>;
+pub type ProgressBar = AMember<AControl<AProgressBar<CocoaProgressBar>>>;
 
 #[repr(C)]
 pub struct CocoaProgressBar {
@@ -18,31 +18,37 @@ pub struct CocoaProgressBar {
 
     skip_callbacks: bool,
 }
-
-impl ProgressBarInner for CocoaProgressBar {
-    fn with_progress(arg: types::Progress) -> Box<ProgressBar> {
-        use plygui_api::controls::HasProgress;
-
-        let mut b = Box::new(Member::with_inner(
-            Control::with_inner(
-                CocoaProgressBar {
-                    base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                    skip_callbacks: false,
-                },
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+impl<O: controls::ProgressBar> NewProgressBarInner<O> for CocoaProgressBar {
+    fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
+        let mut pb = CocoaProgressBar {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            skip_callbacks: false,
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setMinValue: 0.0];
+            (&mut *pb.base.control).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![pb.base.control, setMinValue: 0.0];
         }
-        b.set_progress(arg);
-        b
+        pb
     }
 }
-
+impl ProgressBarInner for CocoaProgressBar {
+    fn with_progress(progress: types::Progress) -> Box<dyn controls::ProgressBar> {
+        let mut b: Box<mem::MaybeUninit<ProgressBar>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
+            AControl::with_inner(
+                AProgressBar::with_inner(
+                    <Self as NewProgressBarInner<ProgressBar>>::with_uninit(b.as_mut()),
+                )
+            ),
+        );
+        controls::HasProgress::set_progress(&mut ab, progress);
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
+    }
+}
 impl HasProgressInner for CocoaProgressBar {
     fn progress(&self, _: &MemberBase) -> types::Progress {
         let total: f64 = unsafe { msg_send![self.base.control, maxValue] };
@@ -179,10 +185,10 @@ impl Drawable for CocoaProgressBar {
         self.base.invalidate();
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    ProgressBar::with_progress(types::Progress::None).into_control()
+impl Spawnable for CocoaProgressBar {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_progress(types::Progress::None).into_control()
+    }
 }
 
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
@@ -192,4 +198,3 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-default_impls_as!(ProgressBar);

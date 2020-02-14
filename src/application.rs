@@ -1,5 +1,4 @@
 use crate::common::{self, *};
-use crate::plygui_api::controls::Container;
 
 use cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use dispatch::Queue;
@@ -11,7 +10,7 @@ lazy_static! {
 const BASE_CLASS: &str = "NSApplication";
 const DEFAULT_FRAME_SLEEP_MS: u32 = 10;
 
-pub type Application = plygui_api::development::Application<CocoaApplication>;
+pub type Application = AApplication<CocoaApplication>;
 
 pub struct CocoaApplication {
     app: cocoa_id,
@@ -67,9 +66,9 @@ impl CocoaApplication {
 }
 
 impl ApplicationInner for CocoaApplication {
-    fn get() -> Box<Application> {
+    fn get() -> Box<dyn controls::Application> {
         unsafe {
-            let mut app = Box::new(plygui_api::development::Application::with_inner(
+            let mut app = Box::new(AApplication::with_inner(
                 CocoaApplication {
                     app: msg_send![WINDOW_CLASS.0, sharedApplication],
                     delegate: msg_send!(DELEGATE.0, new),
@@ -78,12 +77,11 @@ impl ApplicationInner for CocoaApplication {
                     windows: Vec::with_capacity(1),
                     trays: vec![],
                 },
-                (),
             ));
             let selfptr = app.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
-            (&mut *app.as_inner_mut().app).set_ivar(IVAR, selfptr);
-            (&mut *app.as_inner_mut().delegate).set_ivar(IVAR, selfptr);
-            let () = msg_send![app.as_inner_mut().app, setDelegate: app.as_inner_mut().delegate];
+            (&mut *app.inner_mut().app).set_ivar(IVAR, selfptr);
+            (&mut *app.inner_mut().delegate).set_ivar(IVAR, selfptr);
+            let () = msg_send![app.inner_mut().app, setDelegate: app.inner_mut().delegate];
 
             let selfptr = selfptr as usize;
             Queue::main().r#async(move || application_frame_runner(selfptr));
@@ -102,7 +100,7 @@ impl ApplicationInner for CocoaApplication {
         w
     }
     fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let mut tray = crate::tray::CocoaTray::with_params(title, menu);
+        let mut tray = crate::tray::CocoaTray::with_params(title, menu).into_any().downcast::<crate::tray::Tray>().unwrap();
         self.trays.push(tray.as_mut());
         self.apply_execution_policy();
         tray
@@ -114,7 +112,7 @@ impl ApplicationInner for CocoaApplication {
         self.maybe_exit();
     }
     fn remove_tray(&mut self, id: Self::Id) {
-        self.trays.retain(|i| unsafe { (&**i).as_inner().native_id() } != id);
+        self.trays.retain(|i| unsafe { (&**i).inner().native_id() } != id);
         self.apply_execution_policy();
         self.maybe_exit();
     }
@@ -149,7 +147,7 @@ impl ApplicationInner for CocoaApplication {
                         }
                     }
                 }
-                let found = window.find_control_mut(arg.clone()).map(|control| control.as_member_mut());
+                let found = controls::Container::find_control_mut(window, arg.clone()).map(|control| control.as_member_mut());
                 if found.is_some() {
                     return found;
                 }
@@ -193,7 +191,7 @@ impl ApplicationInner for CocoaApplication {
                         }
                     }
                 }
-                let found = window.find_control(arg.clone()).map(|control| control.as_member());
+                let found = controls::Container::find_control(window, arg.clone()).map(|control| control.as_member());
                 if found.is_some() {
                     return found;
                 }
@@ -220,14 +218,12 @@ impl ApplicationInner for CocoaApplication {
     }
     #[allow(unused_comparisons)] // WAT?
     fn exit(&mut self, skip_on_close: bool) -> bool {
-        use crate::plygui_api::controls::Closeable;
-
         let mut n = self.windows.len() as isize;
         let mut i = n - 1;
         while i >= 0 {
             let window = &self.windows[i as usize];
             if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
-                if !window.close(skip_on_close) {
+                if !controls::Closeable::close(window, skip_on_close) {
                     return false;
                 }
             }
@@ -238,7 +234,7 @@ impl ApplicationInner for CocoaApplication {
         i = n - 1;
         while i >= 0 {
             let tray = self.trays[i as usize];
-            if unsafe { !(&mut *tray).close(skip_on_close) } {
+            if unsafe { !controls::Closeable::close(&mut *tray, skip_on_close) } {
                 return false;
             }
             i -= 1;
@@ -285,7 +281,7 @@ struct MemberIterator<'a> {
     index: usize,
 }
 impl<'a> Iterator for MemberIterator<'a> {
-    type Item = &'a (controls::Member + 'static);
+    type Item = &'a (dyn controls::Member + 'static);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.inner.windows.len() {
@@ -351,9 +347,9 @@ unsafe fn register_delegate() -> RefClass {
 extern "C" fn application_did_finish_launching(this: &Object, _sel: Sel, _notification: cocoa_id) {
     if let Some(app) = unsafe { from_cocoa_id_mut(this as *const _ as *mut Object) } {
         unsafe {
-            let () = msg_send![app.as_inner_mut().app, activateIgnoringOtherApps: YES];
+            let () = msg_send![app.inner_mut().app, activateIgnoringOtherApps: YES];
         }
-        app.as_inner_mut().apply_execution_policy();
+        app.inner_mut().apply_execution_policy();
     }
 }
 
@@ -384,7 +380,7 @@ fn application_frame_runner(selfptr: usize) {
         }
     }
     unsafe {
-        let () = msg_send![class!(NSThread), sleepForTimeInterval:(1.0 as f64 / app.as_inner().sleep as f64)];
+        let () = msg_send![class!(NSThread), sleepForTimeInterval:(1.0 as f64 / app.inner().sleep as f64)];
     }
     Queue::main().r#async(move || application_frame_runner(selfptr));
 }

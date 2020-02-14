@@ -19,7 +19,7 @@ pub struct CocoaTray {
     on_close: Option<callbacks::OnClose>,
 }
 
-pub type Tray = Member<CocoaTray>;
+pub type Tray = AMember<ATray<CocoaTray>>;
 
 impl HasLabelInner for CocoaTray {
     fn label(&self, _: &MemberBase) -> Cow<str> {
@@ -51,7 +51,7 @@ impl CloseableInner for CocoaTray {
             status_bar.removeStatusItem_(self.tray);
         }
         let mut app = super::application::Application::get().unwrap();
-        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_tray(self.tray.into());
+        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_tray(self.tray.into());
         true
     }
     fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
@@ -78,25 +78,24 @@ impl HasImageInner for CocoaTray {
 }
 
 impl TrayInner for CocoaTray {
-    fn with_params(title: &str, menu: types::Menu) -> Box<Member<Self>> {
-        use plygui_api::controls::HasLabel;
-
+    fn with_params<S: AsRef<str>>(title: S, menu: types::Menu) -> Box<dyn controls::Tray> {
         let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(nil) };
 
-        let mut t = Box::new(Member::with_inner(
-            CocoaTray {
-                tray: unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) },
-                this: ptr::null_mut(),
-                menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
-                menu: nil,
-                on_close: None,
-            },
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+        let mut t = Box::new(AMember::with_inner(
+            ATray::with_inner(
+                CocoaTray {
+                    tray: unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) },
+                    this: ptr::null_mut(),
+                    menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
+                    menu: nil,
+                    on_close: None,
+                }
+            ),
         ));
 
         let selfptr = t.as_mut() as *mut Tray;
-        t.set_label(title.into());
-        t.as_inner_mut().this = selfptr;
+        controls::HasLabel::set_label(t.as_mut(), title.as_ref().into());
+        t.inner_mut().inner_mut().this = selfptr;
 
         let menu = match menu {
             Some(menu) => unsafe {
@@ -111,14 +110,14 @@ impl TrayInner for CocoaTray {
                     item
                 }
 
-                common::make_menu(nsmenu, menu, &mut t.as_inner_mut().menu_actions, spawn, selfptr as *mut c_void);
+                common::make_menu(nsmenu, menu, &mut t.inner_mut().inner_mut().menu_actions, spawn, selfptr as *mut c_void);
                 nsmenu
             },
             None => nil,
         };
 
         unsafe {
-            let () = msg_send![t.as_inner_mut().tray, setMenu: menu];
+            let () = msg_send![t.inner_mut().inner_mut().tray, setMenu: menu];
         }
         t
     }
@@ -150,12 +149,10 @@ extern "C" fn on_tray_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id) -
     let key = this as cocoa_id;
     let tray = unsafe { common::member_from_cocoa_id_mut::<Tray>(this) }.unwrap();
     let tray2 = unsafe { common::member_from_cocoa_id_mut::<Tray>(this) }.unwrap();
-    if let Some(action) = tray.as_inner_mut().menu_actions.get_mut(&key) {
+    if let Some(action) = tray.inner_mut().inner_mut().menu_actions.get_mut(&key) {
         if !(action.as_mut())(tray2) {
             return NO;
         }
     }
     YES
 }
-
-default_impls_as!(Tray);

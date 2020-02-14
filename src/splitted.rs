@@ -8,7 +8,7 @@ lazy_static! {
     };
     static ref DELEGATE: common::RefClass = unsafe { register_delegate() };
 }
-pub type Splitted = Member<Control<MultiContainer<CocoaSplitted>>>;
+pub type Splitted = AMember<AControl<AContainer<AMultiContainer<ASplitted<CocoaSplitted>>>>>;
 
 const BASE_CLASS: &str = "NSSplitView";
 const PADDING: i32 = 4; // TODO WHY??
@@ -84,38 +84,48 @@ impl CocoaSplitted {
     }
 }
 
-impl SplittedInner for CocoaSplitted {
-    fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<Splitted> {
-        let mut ll = Box::new(Member::with_inner(
-            Control::with_inner(
-                MultiContainer::with_inner(
-                    CocoaSplitted {
-                        base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                        splitter: defaults::SPLITTED_POSITION,
-                        first: first,
-                        second: second,
-                    },
-                    (),
-                ),
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = ll.as_mut() as *mut Splitted;
-
+impl<O: controls::Splitted> NewSplittedInner<O> for CocoaSplitted {
+    fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Self {
+        let mut sp = CocoaSplitted {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            splitter: defaults::SPLITTED_POSITION,
+            first: first,
+            second: second,
+        };
         unsafe {
-            (&mut *ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr as *mut c_void);
+            let selfptr = ptr as *mut Splitted;
+            (&mut *sp.base.control).set_ivar(common::IVAR, selfptr as *mut c_void);
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(common::IVAR, selfptr as *mut c_void);
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, setDelegate: delegate];
-            let first = ll.as_inner_mut().as_inner_mut().as_inner_mut().first.native_id() as cocoa_id;
-            let second = ll.as_inner_mut().as_inner_mut().as_inner_mut().second.native_id() as cocoa_id;
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: first];
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, addSubview: second];
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, setVertical: orientation_to_vertical(orientation)];
-            let () = msg_send![ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control, adjustSubviews];
+            let () = msg_send![sp.base.control, setDelegate: delegate];
+            let first = sp.first.native_id() as cocoa_id;
+            let second = sp.second.native_id() as cocoa_id;
+            let () = msg_send![sp.base.control, addSubview: first];
+            let () = msg_send![sp.base.control, addSubview: second];
+            let () = msg_send![sp.base.control, setVertical: orientation_to_vertical(orientation)];
+            let () = msg_send![sp.base.control, adjustSubviews];
         }
-        ll
+        sp
+    }
+}
+impl SplittedInner for CocoaSplitted {
+    fn with_content(first: Box<dyn controls::Control>, second: Box<dyn controls::Control>, orientation: layout::Orientation) -> Box<dyn controls::Splitted> {
+        let mut b: Box<mem::MaybeUninit<Splitted>> = Box::new_uninit();
+        let ab = AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AMultiContainer::with_inner(
+                        ASplitted::with_inner(
+                            <Self as NewSplittedInner<Splitted>>::with_uninit_params(b.as_mut(), first, second, orientation)
+                        )
+                    ),
+                )
+            ),
+        );
+        unsafe {
+            b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
     fn set_splitter(&mut self, base: &mut MemberBase, pos: f32) {
         let (_, c) = Splitted::control_base_parts_mut(base);
@@ -276,10 +286,10 @@ impl ContainerInner for CocoaSplitted {
 }
 
 impl HasOrientationInner for CocoaSplitted {
-    fn layout_orientation(&self) -> layout::Orientation {
+    fn orientation(&self, _: &MemberBase) -> layout::Orientation {
         vertical_to_orientation(unsafe { msg_send![self.base.control, isVertical] })
     }
-    fn set_layout_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
+    fn set_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
         if orientation != self.layout_orientation() {
             unsafe {
                 let () = msg_send![self.base.control, setVertical: orientation_to_vertical(orientation)];
@@ -414,10 +424,10 @@ fn vertical_to_orientation(vertical: BOOL) -> layout::Orientation {
         _ => unreachable!(),
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
-    Splitted::with_content(crate::text::Text::empty().into_control(), crate::text::Text::empty().into_control(), layout::Orientation::Horizontal).into_control()
+impl Spawnable for CocoaSplitted {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_content(super::text::Text::spawn(), super::text::Text::spawn(), layout::Orientation::Vertical).into_control()
+    }
 }
 unsafe fn register_delegate() -> common::RefClass {
     let superclass = Class::get("NSObject").unwrap();
@@ -488,4 +498,3 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-default_impls_as!(Splitted);

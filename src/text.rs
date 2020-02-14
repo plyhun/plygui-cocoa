@@ -12,35 +12,43 @@ lazy_static! {
 
 const BASE_CLASS: &str = "NSTextView";
 
-pub type Text = Member<Control<CocoaText>>;
+pub type Text = AMember<AControl<AText<CocoaText>>>;
 
 #[repr(C)]
 pub struct CocoaText {
     base: common::CocoaControlBase<Text>,
 }
 
-impl TextInner for CocoaText {
-    fn with_text(text: &str) -> Box<Text> {
-        use plygui_api::controls::HasLabel;
-
-        let mut b = Box::new(Member::with_inner(
-            Control::with_inner(
-                CocoaText {
-                    base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                },
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = b.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+impl<O: controls::Text> NewTextInner<O> for CocoaText {
+    fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
+        let mut tx = CocoaText {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *b.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setDrawsBackground: NO];
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setEditable: NO];
-            let () = msg_send![b.as_inner_mut().as_inner_mut().base.control, setSelectable: NO];
+            (&mut *tx.base.control).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![tx.base.control, setDrawsBackground: NO];
+            let () = msg_send![tx.base.control, setEditable: NO];
+            let () = msg_send![tx.base.control, setSelectable: NO];
         }
-        b.set_label(text.into());
-        b
+        tx
+    }
+}
+impl TextInner for CocoaText {
+    fn with_text<S: AsRef<str>>(text: S) -> Box<dyn controls::Text> {
+        let mut b: Box<mem::MaybeUninit<Text>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
+            AControl::with_inner(
+                AText::with_inner(
+                    <Self as NewTextInner<Text>>::with_uninit(b.as_mut()),
+                )
+            ),
+        );
+        controls::HasLabel::set_label(&mut ab, text.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -161,17 +169,16 @@ impl Drawable for CocoaText {
         self.base.invalidate();
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Text::empty().into_control()
+impl Spawnable for CocoaText {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_text("").into_control()
+    }
 }
 
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Text>(this).unwrap();
-        let () = msg_send![super(sp.as_inner_mut().as_inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
+        let () = msg_send![super(sp.inner_mut().inner_mut().inner_mut().base.control, Class::get(BASE_CLASS).unwrap()), setFrameSize: param];
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-default_impls_as!(Text);

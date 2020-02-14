@@ -10,7 +10,7 @@ lazy_static! {
     };
 }
 
-pub type Message = Member<CocoaMessage>;
+pub type Message = AMember<AMessage<CocoaMessage>>;
 
 #[repr(C)]
 pub struct CocoaMessage {
@@ -20,7 +20,7 @@ pub struct CocoaMessage {
 }
 
 impl MessageInner for CocoaMessage {
-    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&controls::Member>) -> Box<Member<Self>> {
+    fn with_actions(content: types::TextContent, severity: types::MessageSeverity, actions: Vec<(String, callbacks::Action)>, parent: Option<&dyn controls::Member>) -> Box<dyn controls::Message> {
         unsafe {
             let alert: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let alert: cocoa_id = msg_send![alert, init];
@@ -66,13 +66,14 @@ impl MessageInner for CocoaMessage {
                 None => 0 as cocoa_id,
             };
 
-            let mut alert = Box::new(Member::with_inner(
-                CocoaMessage {
-                    control: alert,
-                    actions: actions,
-                    parent: parent,
-                },
-                MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+            let mut alert = Box::new(AMember::with_inner(
+                AMessage::with_inner(
+                    CocoaMessage {
+                        control: alert,
+                        actions: actions,
+                        parent: parent,
+                    }
+                )
             ));
 
             let selfptr = alert.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
@@ -156,5 +157,3 @@ extern "C" fn button_pressed(this: &mut Object, _: Sel, param: cocoa_id) {
         mem::forget(title);
     }
 }
-
-default_impls_as!(Message);

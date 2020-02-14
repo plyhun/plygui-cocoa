@@ -11,7 +11,7 @@ lazy_static! {
 const DEFAULT_PADDING: i32 = 6;
 const BASE_CLASS: &str = "NSImageView";
 
-pub type Image = Member<Control<CocoaImage>>;
+pub type Image = AMember<AControl<AImage<CocoaImage>>>;
 
 #[repr(C)]
 pub struct CocoaImage {
@@ -40,25 +40,35 @@ impl Drop for CocoaImage {
     }
 }
 
-impl ImageInner for CocoaImage {
-    fn with_content(content: image::DynamicImage) -> Box<controls::Image> {
-        let mut i = Box::new(Member::with_inner(
-            Control::with_inner(
-                CocoaImage {
-                    base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                    img: nil,
-                },
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = i.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+impl<O: controls::Image> NewImageInner<O> for CocoaImage {
+    fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, content: image::DynamicImage) -> Self {
+        let mut i = CocoaImage {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            img: nil,
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *i.as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![i.as_inner_mut().as_inner_mut().base.control, setImageAlignment:0];
+            (&mut *i.base.control).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![i.base.control, setImageAlignment:0];
         }
-        i.as_inner_mut().as_inner_mut().install_image(content);
+        i.install_image(content);
         i
+    }
+}
+impl ImageInner for CocoaImage {
+    fn with_content(content: image::DynamicImage) -> Box<dyn controls::Image> {
+        let mut b: Box<mem::MaybeUninit<Image>> = Box::new_uninit();
+        let ab = AMember::with_inner(
+            AControl::with_inner(
+                AImage::with_inner(
+                    <Self as NewImageInner<Image>>::with_uninit_params(b.as_mut(), content)
+                )
+            ),
+        );
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
     fn set_scale(&mut self, _member: &mut MemberBase, policy: types::ImageScalePolicy) {
         if self.scale() != policy {
@@ -74,28 +84,35 @@ impl ImageInner for CocoaImage {
         nsscale_to_policy(scale)
     }
 }
-
+impl HasImageInner for CocoaImage {
+    fn image(&self, _: &MemberBase) -> Cow<image::DynamicImage> {
+        todo!() //Cow::Owned(unsafe { common::native_to_image(self.img) })
+    }
+    fn set_image(&mut self, _: &mut MemberBase, arg0: Cow<image::DynamicImage>) {
+        self.install_image(arg0.into_owned())
+    }
+}
 impl ControlInner for CocoaImage {
-    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
+    fn on_added_to_container(&mut self, member: &mut MemberBase, control: &mut ControlBase, _parent: &dyn controls::Container, _x: i32, _y: i32, pw: u16, ph: u16) {
         self.measure(member, control, pw, ph);
         self.base.invalidate();
     }
-    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &controls::Container) {
+    fn on_removed_from_container(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &dyn controls::Container) {
         unsafe {
             self.base.on_removed_from_container();
         }
     }
 
-    fn parent(&self) -> Option<&controls::Member> {
+    fn parent(&self) -> Option<&dyn controls::Member> {
         self.base.parent()
     }
-    fn parent_mut(&mut self) -> Option<&mut controls::Member> {
+    fn parent_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.parent_mut()
     }
-    fn root(&self) -> Option<&controls::Member> {
+    fn root(&self) -> Option<&dyn controls::Member> {
         self.base.root()
     }
-    fn root_mut(&mut self) -> Option<&mut controls::Member> {
+    fn root_mut(&mut self) -> Option<&mut dyn controls::Member> {
         self.base.root_mut()
     }
 
@@ -200,10 +217,11 @@ fn nsscale_to_policy(i: u32) -> types::ImageScalePolicy {
         }
     }
 }
-/*#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<controls::Control> {
-    Image::with_label("").into_control()
-}*/
+impl Spawnable for CocoaImage {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_content(image::DynamicImage::new_luma8(0, 0)).into_control()
+    }
+}
 
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
@@ -212,4 +230,3 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-default_impls_as!(Image);

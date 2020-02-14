@@ -15,7 +15,7 @@ lazy_static! {
 
 const BASE_CLASS: &str = "NSBox";
 
-pub type Frame = Member<Control<SingleContainer<CocoaFrame>>>;
+pub type Frame = AMember<AControl<AContainer<ASingleContainer<AFrame<CocoaFrame>>>>>;
 
 #[repr(C)]
 pub struct CocoaFrame {
@@ -23,31 +23,39 @@ pub struct CocoaFrame {
     label_padding: (i32, i32),
     child: Option<Box<dyn controls::Control>>,
 }
-
-impl FrameInner for CocoaFrame {
-    fn with_label(label: &str) -> Box<Frame> {
-        use plygui_api::controls::HasLabel;
-
-        let mut frame = Box::new(Member::with_inner(
-            Control::with_inner(
-                SingleContainer::with_inner(
-                    CocoaFrame {
-                        base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                        label_padding: (0, 0),
-                        child: None,
-                    },
-                    (),
-                ),
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = frame.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+impl<O: controls::Frame> NewFrameInner<O> for CocoaFrame {
+    fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
+        let mut fr = CocoaFrame {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            label_padding: (0, 0),
+            child: None,
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *frame.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
+            (&mut *fr.base.control).set_ivar(common::IVAR, selfptr);
         }
-        frame.set_label(label.into());
-        frame
+        fr
+    }
+}
+impl FrameInner for CocoaFrame {
+    fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Frame> {
+        let mut b: Box<mem::MaybeUninit<Frame>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    ASingleContainer::with_inner(
+                        AFrame::with_inner(
+                            <Self as NewFrameInner<Frame>>::with_uninit(b.as_mut())
+                        )
+                    ),
+                ),
+            ),
+        );
+        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 
@@ -300,10 +308,12 @@ impl Drawable for CocoaFrame {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    Frame::with_label("").into_control()
+impl Spawnable for CocoaFrame {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_label("").into_control()
+    }
 }
+
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<Frame>(this).unwrap();
@@ -311,4 +321,3 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16);
     }
 }
-default_impls_as!(Frame);

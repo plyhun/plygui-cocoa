@@ -1,3 +1,4 @@
+#![feature(new_uninit)]
 #![cfg(target_os = "macos")]
 
 #[macro_use]

@@ -10,7 +10,7 @@ lazy_static! {
 
 const BASE_CLASS: &str = "NSView";
 
-pub type LinearLayout = Member<Control<MultiContainer<CocoaLinearLayout>>>;
+pub type LinearLayout = AMember<AControl<AContainer<AMultiContainer<ALinearLayout<CocoaLinearLayout>>>>>;
 
 #[repr(C)]
 pub struct CocoaLinearLayout {
@@ -19,28 +19,39 @@ pub struct CocoaLinearLayout {
     children: Vec<Box<dyn controls::Control>>,
 }
 
-impl LinearLayoutInner for CocoaLinearLayout {
-    fn with_orientation(orientation: layout::Orientation) -> Box<LinearLayout> {
-        let mut ll = Box::new(Member::with_inner(
-            Control::with_inner(
-                MultiContainer::with_inner(
-                    CocoaLinearLayout {
-                        base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
-                        orientation: orientation,
+impl<O: controls::LinearLayout> NewLinearLayoutInner<O> for CocoaLinearLayout {
+    fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, orientation: layout::Orientation) -> Self {
+        let mut ll = CocoaLinearLayout {
+            base: common::CocoaControlBase::with_params(*WINDOW_CLASS),
+            orientation: orientation,
 
-                        children: Vec::new(),
-                    },
-                    (),
-                ),
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = ll.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+            children: Vec::new(),
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            (&mut *ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control).set_ivar(common::IVAR, selfptr);
+            (&mut *ll.base.control).set_ivar(common::IVAR, selfptr);
         }
         ll
+    }
+}
+impl LinearLayoutInner for CocoaLinearLayout {
+    fn with_orientation(orientation: layout::Orientation) -> Box<dyn controls::LinearLayout> {
+        let mut b: Box<mem::MaybeUninit<LinearLayout>> = Box::new_uninit();
+        let ab = AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AMultiContainer::with_inner(
+                        ALinearLayout::with_inner(
+                            <Self as NewLinearLayoutInner<LinearLayout>>::with_uninit_params(b.as_mut(), orientation),
+                        )
+                    ),
+                )
+            ),
+        );
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
     }
 }
 impl MultiContainerInner for CocoaLinearLayout {
@@ -172,10 +183,10 @@ impl ContainerInner for CocoaLinearLayout {
 }
 
 impl HasOrientationInner for CocoaLinearLayout {
-    fn layout_orientation(&self) -> layout::Orientation {
+    fn orientation(&self, _: &mut MemberBase) -> layout::Orientation {
         self.orientation
     }
-    fn set_layout_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
+    fn set_orientation(&mut self, _: &mut MemberBase, orientation: layout::Orientation) {
         if orientation != self.orientation {
             self.orientation = orientation;
             self.base.invalidate();
@@ -339,6 +350,11 @@ impl Drawable for CocoaLinearLayout {
         self.base.invalidate();
     }
 }
+impl Spawnable for CocoaLinearLayout {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_orientation(layout::Orientation::Vertical).into_control()
+    }
+}
 extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
     unsafe {
         let sp = common::member_from_cocoa_id_mut::<LinearLayout>(this).unwrap();
@@ -346,10 +362,3 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         sp.call_on_size(param.width as u16, param.height as u16)
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    LinearLayout::with_orientation(layout::Orientation::Vertical).into_control()
-}
-
-default_impls_as!(LinearLayout);

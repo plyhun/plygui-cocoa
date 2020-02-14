@@ -18,13 +18,14 @@ lazy_static! {
     };
 }
 
-pub type List = Member<Control<Adapter<CocoaList>>>;
+pub type List = AMember<AControl<AContainer<AAdapted<AList<CocoaList>>>>>;
 
 #[repr(C)]
 pub struct CocoaList {
     base: common::CocoaControlBase<List>,
     table: cocoa_id,
     items: Vec<Box<dyn controls::Control>>,
+    on_item_click: Option<callbacks::OnItemClick>
 }
 
 impl CocoaList {
@@ -44,33 +45,24 @@ impl CocoaList {
     }    
 }
 
-impl AdapterViewInner for CocoaList {
-    fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<List> {
+impl<O: controls::List> NewListInner<O> for CocoaList {
+    fn with_uninit(ptr: &mut mem::MaybeUninit<O>) -> Self {
         let base = common::CocoaControlBase::with_params(*WINDOW_CLASS);
         let base_bounds: NSRect = unsafe { msg_send![base.control, bounds] };
-        let mut ll = Box::new(Member::with_inner(
-            Control::with_inner(
-                Adapter::with_inner(
-                    CocoaList {
-                        base: base,
-                        table: unsafe {
-                            let mut control: cocoa_id = msg_send![WINDOW_CLASS_INNER.0, alloc];
-                            control = msg_send![control, initWithFrame: base_bounds];
-                            control
-                        },
-                        items: Vec::new(),
-                    },
-                    adapter,
-                ),
-                (),
-            ),
-            MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
-        ));
-        let selfptr = ll.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+        let mut li = CocoaList {
+            base: base,
+            table: unsafe {
+                let mut control: cocoa_id = msg_send![WINDOW_CLASS_INNER.0, alloc];
+                control = msg_send![control, initWithFrame: base_bounds];
+                control
+            },
+            items: Vec::new(),
+        };
+        let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
-            let control = ll.as_inner_mut().as_inner_mut().as_inner_mut().base.control;
+            let control = li.base.control;
             (&mut *control).set_ivar(common::IVAR, selfptr);
-            let table = ll.as_inner_mut().as_inner_mut().as_inner_mut().table;
+            let table = li.table;
             (&mut *table).set_ivar(common::IVAR, selfptr);
             
             let column: cocoa_id = msg_send![Class::get("NSTableColumn").unwrap(), alloc];
@@ -92,8 +84,47 @@ impl AdapterViewInner for CocoaList {
             
             let _ = msg_send![control, setDocumentView: table];
         }
-        ll
+        li
     }
+}
+impl ListInner for CocoaList {
+    fn with_adapter(adapter: Box<dyn types::Adapter>) -> Box<dyn controls::List> {
+        let len = adapter.len();
+        let mut b: Box<mem::MaybeUninit<List>> = Box::new_uninit();
+        let mut ab = AMember::with_inner(
+            AControl::with_inner(
+                AContainer::with_inner(
+                    AAdapted::with_inner(
+                        AList::with_inner(
+                            <Self as NewListInner<List>>::with_uninit(b.as_mut())
+                        ),
+                        adapter,
+                        &mut b,
+                    ),
+                )
+            ),
+        );
+        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::with_capacity(len);
+        unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        }
+    }
+}
+impl ItemClickableInner for CocoaList {
+    fn item_click(&mut self, i: usize, item_view: &mut dyn controls::Control, skip_callbacks: bool) {
+        if !skip_callbacks{
+            let self2 = self.base.as_outer_mut();
+            if let Some(ref mut callback) = self.on_item_click {
+                (callback.as_mut())(self2, i, item_view)
+            }
+        }
+    }
+    fn on_item_click(&mut self, callback: Option<callbacks::OnItemClick>) {
+        self.on_item_click = callback;
+    }
+}
+impl AdaptedInner for CocoaList {
     fn on_item_change(&mut self, base: &mut MemberBase, value: types::Change) {
         match value {
             types::Change::Added(at) => {
@@ -300,12 +331,12 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, param: NSSize) {
         }
     }
 }
-/*
-#[allow(dead_code)]
-pub(crate) fn spawn() -> Box<dyn controls::Control> {
-    List::with_orientation(layout::Orientation::Vertical).into_control()
+impl Spawnable for CocoaList {
+    fn spawn() -> Box<dyn controls::Control> {
+        Self::with_adapter(Box::new(types::imp::StringVecAdapter::<crate::imp::Text>::new())).into_control()
+    }
 }
-*/
+
 extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSInteger {
     unsafe {
         let sp = common::member_from_cocoa_id::<List>(this).unwrap();
@@ -341,5 +372,3 @@ extern "C" fn validate_proposed_first_responder(_: &mut Object, _: Sel, responde
         _ => NO //unsafe { msg_send![super(this, Class::get(BASE_CLASS).unwrap()), validateProposedFirstResponder:responder forEvent:evt] }
     }
 }
-
-default_impls_as!(List);

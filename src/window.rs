@@ -14,7 +14,7 @@ lazy_static! {
     };
 }
 
-pub type Window = Member<SingleContainer<::plygui_api::development::Window<CocoaWindow>>>;
+pub type Window = AMember<AContainer<ASingleContainer<AWindow<CocoaWindow>>>>;
 
 #[repr(C)]
 pub struct CocoaWindow {
@@ -52,7 +52,7 @@ impl CloseableInner for CocoaWindow {
         let visible: BOOL = unsafe { msg_send![self.window, isVisible] };
         if visible == NO {
             let mut app = super::application::Application::get().unwrap();
-            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(self.window.into());
+            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_window(self.window.into());
             true
         } else {
             false
@@ -64,7 +64,7 @@ impl CloseableInner for CocoaWindow {
 }
 
 impl WindowInner for CocoaWindow {
-    fn with_params(title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Box<Window> {
+    fn with_params<S: AsRef<str>>(title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
         unsafe {
             let rect: NSRect = match window_size {
                 types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),
@@ -73,7 +73,7 @@ impl WindowInner for CocoaWindow {
                     msg_send![screen, frame]
                 }
             };
-            let title = NSString::alloc(cocoa::base::nil).init_str(title);
+            let title = NSString::alloc(cocoa::base::nil).init_str(title.as_ref());
             let window: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window.initWithContentRect_styleMask_backing_defer_(
                 rect,
@@ -91,34 +91,33 @@ impl WindowInner for CocoaWindow {
             let view = NSView::alloc(nil).initWithFrame_(rect);
             let () = msg_send![window, setContentView: view];
 
-            let mut window = Box::new(Member::with_inner(
-                SingleContainer::with_inner(
-                    ::plygui_api::development::Window::with_inner(
-                        CocoaWindow {
-                            window: window,
-                            container: view,
-                            menu: nil,
-                            child: None,
-                            menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
-                            on_close: None,
-                            skip_callbacks: false,
-                            closed: false,
-                        },
-                        (),
+            let mut window = Box::new(AMember::with_inner(
+                AContainer::with_inner(
+                    ASingleContainer::with_inner(
+                        AWindow::with_inner(
+                            CocoaWindow {
+                                window: window,
+                                container: view,
+                                menu: nil,
+                                child: None,
+                                menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
+                                on_close: None,
+                                skip_callbacks: false,
+                                closed: false,
+                            },
+                        ),
                     ),
-                    (),
-                ),
-                MemberFunctions::new(_as_any, _as_any_mut, _as_member, _as_member_mut),
+                )
             ));
 
             let selfptr = window.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(common::IVAR, selfptr);
-            (&mut *window.as_inner_mut().as_inner_mut().as_inner_mut().window).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, setDelegate: delegate];
-            let () = msg_send![window.as_inner_mut().as_inner_mut().as_inner_mut().window, makeKeyAndOrderFront: nil];
+            (&mut *window.inner_mut().inner_mut().inner_mut().inner_mut().window).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![window.inner_mut().inner_mut().inner_mut().inner_mut().window, setDelegate: delegate];
+            let () = msg_send![window.inner_mut().inner_mut().inner_mut().inner_mut().window, makeKeyAndOrderFront: nil];
 
-            window.as_inner_mut().as_inner_mut().as_inner_mut().menu = match menu {
+            window.inner_mut().inner_mut().inner_mut().inner_mut().menu = match menu {
                 Some(menu) => {
                     let nsmenu = NSMenu::new(view);
                     let () = msg_send![nsmenu, setTitle: title];
@@ -131,7 +130,7 @@ impl WindowInner for CocoaWindow {
                         item
                     }
 
-                    common::make_menu(nsmenu, menu, &mut window.as_inner_mut().as_inner_mut().as_inner_mut().menu_actions, spawn, selfptr);
+                    common::make_menu(nsmenu, menu, &mut window.inner_mut().inner_mut().inner_mut().inner_mut().menu_actions, spawn, selfptr);
                     nsmenu
                 }
                 None => nil,
@@ -281,21 +280,19 @@ unsafe fn register_delegate() -> common::RefClass {
 }
 
 fn window_redraw(this: &mut Object) {
-    use plygui_api::controls::HasSize;
-
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
-    let size = window.size();
+    let size = controls::HasSize::size(window);
 
-    window.as_inner_mut().as_inner_mut().as_inner_mut().redraw();
+    window.inner_mut().inner_mut().inner_mut().inner_mut().redraw();
     window.call_on_size(size.0, size.1);
 }
 
 extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
-    let menu = window.as_inner_mut().as_inner_mut().as_inner_mut().menu;
+    let menu = window.inner_mut().inner_mut().inner_mut().inner_mut().menu;
     //if !menu.is_null() {
     let mut app = super::application::Application::get().unwrap();
-    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().set_app_menu(menu);
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().set_app_menu(menu);
     //}
 }
 
@@ -308,8 +305,8 @@ extern "C" fn window_did_change_screen(this: &mut Object, _: Sel, _: cocoa_id) {
 }
 extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
-    if !window.as_inner_mut().as_inner_mut().as_inner_mut().skip_callbacks {
-        if let Some(ref mut on_close) = window.as_inner_mut().as_inner_mut().as_inner_mut().on_close {
+    if !window.inner_mut().inner_mut().inner_mut().inner_mut().skip_callbacks {
+        if let Some(ref mut on_close) = window.inner_mut().inner_mut().inner_mut().inner_mut().on_close {
             let window2 = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
             if !(on_close.as_mut())(window2) {
                 return NO;
@@ -317,7 +314,7 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
         }
     }
     let mut app = super::application::Application::get().unwrap();
-    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().as_inner_mut().remove_window(param.into());
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_window(param.into());
     YES
 }
 
@@ -325,12 +322,10 @@ extern "C" fn on_window_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id)
     let key = this as cocoa_id;
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
     let window2 = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
-    if let Some(action) = window.as_inner_mut().as_inner_mut().as_inner_mut().menu_actions.get_mut(&key) {
+    if let Some(action) = window.inner_mut().inner_mut().inner_mut().inner_mut().menu_actions.get_mut(&key) {
         if !(action.as_mut())(window2) {
             return NO;
         }
     }
     YES
 }
-
-default_impls_as!(Window);
