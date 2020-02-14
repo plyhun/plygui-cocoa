@@ -35,18 +35,19 @@ impl<O: controls::ProgressBar> NewProgressBarInner<O> for CocoaProgressBar {
 impl ProgressBarInner for CocoaProgressBar {
     fn with_progress(progress: types::Progress) -> Box<dyn controls::ProgressBar> {
         let mut b: Box<mem::MaybeUninit<ProgressBar>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AProgressBar::with_inner(
                     <Self as NewProgressBarInner<ProgressBar>>::with_uninit(b.as_mut()),
                 )
             ),
         );
-        controls::HasProgress::set_progress(&mut ab, progress);
-        unsafe {
+        let mut ab = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
-        }
+        };
+        controls::HasProgress::set_progress(ab.as_mut(), progress);
+        ab
     }
 }
 impl HasProgressInner for CocoaProgressBar {

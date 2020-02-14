@@ -37,18 +37,19 @@ impl<O: controls::Text> NewTextInner<O> for CocoaText {
 impl TextInner for CocoaText {
     fn with_text<S: AsRef<str>>(text: S) -> Box<dyn controls::Text> {
         let mut b: Box<mem::MaybeUninit<Text>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AText::with_inner(
                     <Self as NewTextInner<Text>>::with_uninit(b.as_mut()),
                 )
             ),
         );
-        controls::HasLabel::set_label(&mut ab, text.as_ref().into());
-        unsafe {
+        let mut ab = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
-        }
+        };
+        controls::HasLabel::set_label(ab.as_mut(), text.as_ref().into());
+        ab
     }
 }
 

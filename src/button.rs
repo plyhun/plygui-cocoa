@@ -47,18 +47,19 @@ impl<O: controls::Button> NewButtonInner<O> for CocoaButton {
 impl ButtonInner for CocoaButton {
     fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Button> {
         let mut b: Box<mem::MaybeUninit<Button>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AButton::with_inner(
                     <Self as NewButtonInner<Button>>::with_uninit(b.as_mut())
                 )
             ),
         );
-        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
-        unsafe {
+        let mut ab = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
-        }
+        };
+        controls::HasLabel::set_label(ab.as_mut(), label.as_ref().into());
+        ab
     }
 }
 

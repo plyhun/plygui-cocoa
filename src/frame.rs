@@ -40,7 +40,7 @@ impl<O: controls::Frame> NewFrameInner<O> for CocoaFrame {
 impl FrameInner for CocoaFrame {
     fn with_label<S: AsRef<str>>(label: S) -> Box<dyn controls::Frame> {
         let mut b: Box<mem::MaybeUninit<Frame>> = Box::new_uninit();
-        let mut ab = AMember::with_inner(
+        let ab = AMember::with_inner(
             AControl::with_inner(
                 AContainer::with_inner(
                     ASingleContainer::with_inner(
@@ -51,11 +51,12 @@ impl FrameInner for CocoaFrame {
                 ),
             ),
         );
-        controls::HasLabel::set_label(&mut ab, label.as_ref().into());
-        unsafe {
+        let mut ab = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
-        }
+        };
+        controls::HasLabel::set_label(ab.as_mut(), label.as_ref().into());
+        ab
     }
 }
 

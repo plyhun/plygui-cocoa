@@ -1,3 +1,4 @@
+#![allow(type_alias_bounds)]
 #![feature(new_uninit)]
 #![cfg(target_os = "macos")]
 
