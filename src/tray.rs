@@ -137,10 +137,13 @@ impl Drop for CocoaTray {
     fn drop(&mut self) {
         self.close(true);
         unsafe {
+            let () = msg_send![self.tray, dealloc];
             if !self.menu.is_null() {
                 let () = msg_send![self.menu, dealloc];
             }
-            let () = msg_send![self.tray, dealloc];
+            for (k,_) in self.menu_actions.drain() {
+                let () = msg_send![k, dealloc];
+            }
         }
     }
 }

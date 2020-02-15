@@ -260,6 +260,12 @@ impl Drop for CocoaWindow {
         unsafe {
             let () = msg_send![self.container, dealloc];
             let () = msg_send![self.window, dealloc];
+            if !self.menu.is_null() {
+                let () = msg_send![self.menu, dealloc];
+            }
+            for (k,_) in self.menu_actions.drain() {
+                let () = msg_send![k, dealloc];
+            }
         }
         self.close(true);
     }
