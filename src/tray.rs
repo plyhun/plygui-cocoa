@@ -14,6 +14,7 @@ lazy_static! {
 pub struct CocoaTray {
     tray: cocoa_id,
     this: *mut Tray,
+    icon: image::DynamicImage,
     menu: cocoa_id,
     menu_actions: HashMap<cocoa_id, callbacks::Action>,
     on_close: Option<callbacks::OnClose>,
@@ -51,7 +52,7 @@ impl CloseableInner for CocoaTray {
             status_bar.removeStatusItem_(self.tray);
         }
         let mut app = super::application::Application::get().unwrap();
-        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_tray(self.tray.into());
+        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().unregister_tray(unsafe { &mut *self.this });
         true
     }
     fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
@@ -76,27 +77,40 @@ impl HasImageInner for CocoaTray {
         }
     }    
 }
-
+impl<O: controls::Tray> NewTrayInner<O> for CocoaTray {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, _: &str, icon: image::DynamicImage, menu: types::Menu) -> Self {
+        CocoaTray {
+            tray: ptr::null_mut(),
+            this: u as *mut _ as *mut Tray,
+            icon: icon,
+            menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
+            menu: nil,
+            on_close: None,
+        }
+    }
+}
 impl TrayInner for CocoaTray {
-    fn with_params<S: AsRef<str>>(title: S, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(nil) };
-
-        let mut t = Box::new(AMember::with_inner(
+    fn with_params<S: AsRef<str>>(title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
+        let mut b: Box<mem::MaybeUninit<Tray>> = Box::new_uninit();
+        let app = crate::application::Application::get().unwrap();
+        let ab = AMember::with_inner(
             ATray::with_inner(
-                CocoaTray {
-                    tray: unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) },
-                    this: ptr::null_mut(),
-                    menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
-                    menu: nil,
-                    on_close: None,
-                }
-            ),
-        ));
-
-        let selfptr = t.as_mut() as *mut Tray;
+                <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
+	            app,
+            )
+        );
+        let mut t = unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        };
+        let app = super::application::Application::get().unwrap();
+        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
+        
+        let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(nil) };
+        t.inner_mut().inner_mut().tray = unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) };
+        
         controls::HasLabel::set_label(t.as_mut(), title.as_ref().into());
-        t.inner_mut().inner_mut().this = selfptr;
-
+        
         let menu = match menu {
             Some(menu) => unsafe {
                 let nsmenu = NSMenu::new(nil);
@@ -109,8 +123,9 @@ impl TrayInner for CocoaTray {
                     (&mut *item).set_ivar(IVAR, selfptr);
                     item
                 }
-
-                common::make_menu(nsmenu, menu, &mut t.inner_mut().inner_mut().menu_actions, spawn, selfptr as *mut c_void);
+                
+                let selfptr = t.as_mut() as *mut _ as *mut c_void;
+                common::make_menu(nsmenu, menu, &mut t.inner_mut().inner_mut().menu_actions, spawn, selfptr);
                 nsmenu
             },
             None => nil,
@@ -119,6 +134,8 @@ impl TrayInner for CocoaTray {
         unsafe {
             let () = msg_send![t.inner_mut().inner_mut().tray, setMenu: menu];
         }
+        let mut t: Box<dyn controls::Tray> = t;
+        app.inner_mut().register_tray(&mut t);
         t
     }
 }
@@ -126,7 +143,7 @@ impl TrayInner for CocoaTray {
 impl HasNativeIdInner for CocoaTray {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.tray.into()
     }
 }

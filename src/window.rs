@@ -21,6 +21,8 @@ pub struct CocoaWindow {
     pub(crate) window: cocoa_id,
     pub(crate) container: cocoa_id,
     menu: cocoa_id,
+    
+    resize: fn(this: &mut Window),
 
     child: Option<Box<dyn controls::Control>>,
     menu_actions: HashMap<cocoa_id, callbacks::Action>,
@@ -52,7 +54,7 @@ impl CloseableInner for CocoaWindow {
         let visible: BOOL = unsafe { msg_send![self.window, isVisible] };
         if visible == NO {
             let mut app = super::application::Application::get().unwrap();
-            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_window(self.window.into());
+            app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().unregister_window(unsafe { common::member_from_cocoa_id_mut::<Window>(self.window) }.unwrap());
             true
         } else {
             false
@@ -63,17 +65,18 @@ impl CloseableInner for CocoaWindow {
     }
 }
 
-impl WindowInner for CocoaWindow {
-    fn with_params<S: AsRef<str>>(title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        unsafe {
-            let rect: NSRect = match window_size {
-                types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),
-                types::WindowStartSize::Fullscreen => {
-                    let screen: cocoa_id = msg_send![class!(NSScreen), mainScreen];
-                    msg_send![screen, frame]
-                }
-            };
-            let title = NSString::alloc(cocoa::base::nil).init_str(title.as_ref());
+impl<O: controls::Window> NewWindowInner<O> for CocoaWindow {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Self {
+        let selfptr = u as *mut _ as *mut c_void;
+   		let rect: NSRect = match window_size {
+            types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),
+            types::WindowStartSize::Fullscreen => {
+                let screen: cocoa_id = unsafe { msg_send![class!(NSScreen), mainScreen] };
+                unsafe { msg_send![screen, frame] }
+            }
+        };
+   		let mut w = unsafe {
+            let title = NSString::alloc(cocoa::base::nil).init_str(title);
             let window: cocoa_id = msg_send![WINDOW_CLASS.0, alloc];
             let window = window.initWithContentRect_styleMask_backing_defer_(
                 rect,
@@ -87,57 +90,73 @@ impl WindowInner for CocoaWindow {
             let () = msg_send![window, makeKeyAndOrderFront: nil];
             let current_app = cocoa::appkit::NSRunningApplication::currentApplication(nil);
             let () = msg_send![current_app, activateWithOptions: cocoa::appkit::NSApplicationActivateIgnoringOtherApps];
-
+    
             let view = NSView::alloc(nil).initWithFrame_(rect);
             let () = msg_send![window, setContentView: view];
-
-            let mut window = Box::new(AMember::with_inner(
-                AContainer::with_inner(
-                    ASingleContainer::with_inner(
-                        AWindow::with_inner(
-                            CocoaWindow {
-                                window: window,
-                                container: view,
-                                menu: nil,
-                                child: None,
-                                menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
-                                on_close: None,
-                                skip_callbacks: false,
-                                closed: false,
-                            },
-                        ),
-                    ),
-                )
-            ));
-
-            let selfptr = window.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
+            
             let delegate: *mut Object = msg_send!(DELEGATE.0, new);
             (&mut *delegate).set_ivar(common::IVAR, selfptr);
-            (&mut *window.inner_mut().inner_mut().inner_mut().inner_mut().window).set_ivar(common::IVAR, selfptr);
-            let () = msg_send![window.inner_mut().inner_mut().inner_mut().inner_mut().window, setDelegate: delegate];
-            let () = msg_send![window.inner_mut().inner_mut().inner_mut().inner_mut().window, makeKeyAndOrderFront: nil];
+            (&mut *window).set_ivar(common::IVAR, selfptr);
+            let () = msg_send![window, setDelegate: delegate];
+            let () = msg_send![window, makeKeyAndOrderFront: nil];
+    
+            CocoaWindow {
+                window: window,
+                container: view,
+                resize: window_did_change_screen_resize_inner::<O>,
+                menu: nil,
+                child: None,
+                menu_actions: if menu.is_some() { HashMap::new() } else { HashMap::with_capacity(0) },
+                on_close: None,
+                skip_callbacks: false,
+                closed: false,
+            }
+        };
+		w.menu = match menu {
+            Some(menu) => unsafe {
+                let nsmenu = NSMenu::new(w.container);
+                let title = NSString::alloc(cocoa::base::nil).init_str(title);
+                let () = msg_send![nsmenu, setTitle: title];
 
-            window.inner_mut().inner_mut().inner_mut().inner_mut().menu = match menu {
-                Some(menu) => {
-                    let nsmenu = NSMenu::new(view);
-                    let () = msg_send![nsmenu, setTitle: title];
-
-                    unsafe fn spawn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id {
-                        let item: cocoa_id = msg_send![PLYGUI_MENU_ITEM_CLASS.0, alloc];
-                        let item: cocoa_id = msg_send![item, initWithTitle:title action:sel!(onWindowMenuItemSelect:) keyEquivalent:NSString::alloc(cocoa::base::nil).init_str("")];
-                        let () = msg_send![item, setTarget: item];
-                        (&mut *item).set_ivar(IVAR, selfptr);
-                        item
-                    }
-
-                    common::make_menu(nsmenu, menu, &mut window.inner_mut().inner_mut().inner_mut().inner_mut().menu_actions, spawn, selfptr);
-                    nsmenu
+                unsafe fn spawn(title: cocoa_id, selfptr: *mut c_void) -> cocoa_id {
+                    let item: cocoa_id = msg_send![PLYGUI_MENU_ITEM_CLASS.0, alloc];
+                    let item: cocoa_id = msg_send![item, initWithTitle:title action:sel!(onWindowMenuItemSelect:) keyEquivalent:NSString::alloc(cocoa::base::nil).init_str("")];
+                    let () = msg_send![item, setTarget: item];
+                    (&mut *item).set_ivar(IVAR, selfptr);
+                    item
                 }
-                None => nil,
-            };
 
-            window
-        }
+                common::make_menu(nsmenu, menu, &mut w.menu_actions, spawn, selfptr);
+                nsmenu
+            }
+            None => nil,
+        };
+		w
+    }
+}
+impl WindowInner for CocoaWindow {
+    fn with_params<S: AsRef<str>>(title: S, window_size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
+        let mut b: Box<mem::MaybeUninit<Window>> = Box::new_uninit();
+        let ab = AMember::with_inner(
+            AContainer::with_inner(
+                ASingleContainer::with_inner(
+                    AWindow::with_inner(
+                        <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
+	                    crate::application::Application::get().unwrap(),
+                    ),
+                ),
+            )
+        );
+        let window = unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        };
+        
+        let mut window: Box<dyn controls::Window> = window;
+        let app = crate::application::Application::get().unwrap();
+        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
+        app.inner_mut().register_window(&mut window);
+	    window
     }
     fn size(&self) -> (u16, u16) {
         self.size_inner()
@@ -224,7 +243,7 @@ impl ContainerInner for CocoaWindow {
 impl HasNativeIdInner for CocoaWindow {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.window.into()
     }
 }
@@ -276,8 +295,8 @@ unsafe fn register_delegate() -> common::RefClass {
     let mut decl = ClassDecl::new("PlyguiWindowDelegate", superclass).unwrap();
 
     decl.add_method(sel!(windowShouldClose:), window_should_close as extern "C" fn(&mut Object, Sel, cocoa_id) -> BOOL);
-    decl.add_method(sel!(windowDidResize:), window_did_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
-    decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen as extern "C" fn(&mut Object, Sel, cocoa_id));
+    decl.add_method(sel!(windowDidResize:), window_did_change_screen_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
+    decl.add_method(sel!(windowDidChangeScreen:), window_did_change_screen_resize as extern "C" fn(&mut Object, Sel, cocoa_id));
     decl.add_method(sel!(windowDidBecomeKey:), window_did_become_key as extern "C" fn(&mut Object, Sel, cocoa_id));
 
     decl.add_ivar::<*mut c_void>(common::IVAR);
@@ -285,12 +304,11 @@ unsafe fn register_delegate() -> common::RefClass {
     common::RefClass(decl.register())
 }
 
-fn window_redraw(this: &mut Object) {
-    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+fn window_redraw<O: controls::Window>(window: &mut Window) {
     let size = controls::HasSize::size(window);
 
     window.inner_mut().inner_mut().inner_mut().inner_mut().redraw();
-    window.call_on_size(size.0, size.1);
+    window.call_on_size::<O>(size.0, size.1);
 }
 
 extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
@@ -302,13 +320,15 @@ extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _: cocoa_id) {
     //}
 }
 
-extern "C" fn window_did_resize(this: &mut Object, _: Sel, _: cocoa_id) {
-    window_redraw(this)
+extern "C" fn window_did_change_screen_resize(this: &mut Object, _: Sel, _: cocoa_id) {
+    let window = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    let this = unsafe { common::member_from_cocoa_id_mut::<Window>(this) }.unwrap();
+    (window.inner_mut().inner_mut().inner_mut().inner_mut().resize)(this)
+}
+fn window_did_change_screen_resize_inner<O: controls::Window>(this: &mut Window) {
+    window_redraw::<O>(this)
 }
 
-extern "C" fn window_did_change_screen(this: &mut Object, _: Sel, _: cocoa_id) {
-    window_redraw(this)
-}
 extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BOOL {
     let window = unsafe { common::member_from_cocoa_id_mut::<Window>(param) }.unwrap();
     if !window.inner_mut().inner_mut().inner_mut().inner_mut().skip_callbacks {
@@ -320,7 +340,7 @@ extern "C" fn window_should_close(_: &mut Object, _: Sel, param: cocoa_id) -> BO
         }
     }
     let mut app = super::application::Application::get().unwrap();
-    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().remove_window(param.into());
+    app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().unregister_window(window);
     YES
 }
 

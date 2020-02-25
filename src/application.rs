@@ -25,7 +25,7 @@ pub struct CocoaApplication {
 impl HasNativeIdInner for CocoaApplication {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.app.into()
     }
 }
@@ -89,28 +89,23 @@ impl ApplicationInner for CocoaApplication {
             app
         }
     }
-    fn new_window(&mut self, title: &str, size: types::WindowStartSize, menu: types::Menu) -> Box<dyn controls::Window> {
-        let w = crate::window::CocoaWindow::with_params(title, size, menu);
+    fn register_window(&mut self, window: &mut Box<dyn controls::Window>) {
         unsafe {
-            self.windows.push(w.native_id() as cocoa_id);
+            self.windows.push(window.native_id() as cocoa_id);
         }
         self.apply_execution_policy();
-        w
     }
-    fn new_tray(&mut self, title: &str, menu: types::Menu) -> Box<dyn controls::Tray> {
-        let mut tray = crate::tray::CocoaTray::with_params(title, menu).into_any().downcast::<crate::tray::Tray>().unwrap();
-        self.trays.push(tray.as_mut());
+    fn register_tray(&mut self, tray: &mut Box<dyn controls::Tray>) {
+        self.trays.push(tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap());
         self.apply_execution_policy();
-        tray
     }
-    fn remove_window(&mut self, id: Self::Id) {
-        let id = cocoa_id::from(id);
-        self.windows.retain(|i| *i != id);
+    fn unregister_window(&mut self, window: &mut dyn controls::Window) {
+        self.windows.retain(|i| *i != unsafe { window.native_id() } as cocoa_id);
         self.apply_execution_policy();
         self.maybe_exit();
     }
-    fn remove_tray(&mut self, id: Self::Id) {
-        self.trays.retain(|i| unsafe { (&**i).inner().native_id() } != id);
+    fn unregister_tray(&mut self, tray: &mut dyn controls::Tray) {
+        self.trays.retain(|i| unsafe { controls::HasNativeId::native_id(&**i) != tray.native_id() });
         self.apply_execution_policy();
         self.maybe_exit();
     }

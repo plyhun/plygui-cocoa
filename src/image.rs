@@ -126,7 +126,7 @@ impl ControlInner for CocoaImage {
 impl HasNativeIdInner for CocoaImage {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

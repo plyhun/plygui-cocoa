@@ -133,7 +133,7 @@ impl HasLabelInner for CocoaMessage {
 impl HasNativeIdInner for CocoaMessage {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.control.into()
     }
 }

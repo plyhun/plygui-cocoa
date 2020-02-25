@@ -238,7 +238,7 @@ impl ControlInner for CocoaFrame {
 impl HasNativeIdInner for CocoaFrame {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

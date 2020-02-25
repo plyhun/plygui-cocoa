@@ -128,7 +128,7 @@ impl ControlInner for CocoaProgressBar {
 impl HasNativeIdInner for CocoaProgressBar {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

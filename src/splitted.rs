@@ -362,7 +362,7 @@ impl HasLayoutInner for CocoaSplitted {
 impl HasNativeIdInner for CocoaSplitted {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

@@ -262,7 +262,7 @@ impl HasLayoutInner for CocoaList {
 impl HasNativeIdInner for CocoaList {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

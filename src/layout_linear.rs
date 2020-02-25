@@ -268,7 +268,7 @@ impl HasLayoutInner for CocoaLinearLayout {
 impl HasNativeIdInner for CocoaLinearLayout {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }

@@ -128,7 +128,7 @@ impl ControlInner for CocoaButton {
 impl HasNativeIdInner for CocoaButton {
     type Id = common::CocoaId;
 
-    unsafe fn native_id(&self) -> Self::Id {
+    fn native_id(&self) -> Self::Id {
         self.base.control.into()
     }
 }
