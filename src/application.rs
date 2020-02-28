@@ -3,6 +3,8 @@ use crate::common::{self, *};
 use cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use dispatch::Queue;
 
+use std::any::TypeId;
+
 lazy_static! {
     static ref WINDOW_CLASS: RefClass = unsafe { register_window_class("PlyguiApplication", BASE_CLASS, |_| {}) };
     static ref DELEGATE: RefClass = unsafe { register_delegate() };
@@ -17,9 +19,6 @@ pub struct CocoaApplication {
     delegate: *mut Object,
     name: String,
     sleep: u32,
-
-    pub(crate) windows: Vec<cocoa_id>,
-    pub(crate) trays: Vec<*mut crate::tray::Tray>,
 }
 
 impl HasNativeIdInner for CocoaApplication {
@@ -41,73 +40,130 @@ impl CocoaApplication {
         }
     }
     fn apply_execution_policy(&mut self) {
-        if self.windows.len() < 1 && self.trays.len() > 0 {
-            unsafe {
+        unsafe {
+            let base = &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base;
+            if base.windows.len() < 1 && base.trays.len() > 0 {
                 self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
-            }
-        } else {
-            unsafe {
+            } else {
                 self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular);
             }
         }
     }
-    fn maybe_exit(&mut self) -> bool {
-        if self.windows.len() < 1 && self.trays.len() < 1 {
-            unsafe {
+    pub fn maybe_exit(&mut self) -> bool {
+        unsafe {
+            let base = &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base;
+            if base.windows.len() < 1 && base.trays.len() < 1 {
                 self.app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited);
                 let app: cocoa_id = msg_send![WINDOW_CLASS.0, sharedApplication];
                 let () = msg_send![app, terminate:self.app];
+                true
+            } else {
+                false
             }
-            true
-        } else {
-            false
         }
     }
 }
 
+impl<O: controls::Application> NewApplicationInner<O> for CocoaApplication {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, name: &str) -> Self {
+        let a = CocoaApplication {
+            app: unsafe { msg_send![WINDOW_CLASS.0, sharedApplication] },
+            delegate: unsafe { msg_send!(DELEGATE.0, new) },
+            name: name.to_owned(),
+            sleep: DEFAULT_FRAME_SLEEP_MS,
+        };
+        unsafe {
+            let selfptr = u as *mut _ as *mut c_void;
+            (&mut *a.app).set_ivar(IVAR, selfptr);
+            (&mut *a.delegate).set_ivar(IVAR, selfptr);
+            let () = msg_send![a.app, setDelegate: a.delegate];
+        }
+        a
+    }
+}
+
 impl ApplicationInner for CocoaApplication {
-    fn get() -> Box<dyn controls::Application> {
-        unsafe {
-            let mut app = Box::new(AApplication::with_inner(
-                CocoaApplication {
-                    app: msg_send![WINDOW_CLASS.0, sharedApplication],
-                    delegate: msg_send!(DELEGATE.0, new),
-                    name: String::new(), // name.to_owned(), // TODO later
-                    sleep: DEFAULT_FRAME_SLEEP_MS,
-                    windows: Vec::with_capacity(1),
-                    trays: vec![],
-                },
-            ));
-            let selfptr = app.as_mut() as *mut _ as *mut ::std::os::raw::c_void;
-            (&mut *app.inner_mut().app).set_ivar(IVAR, selfptr);
-            (&mut *app.inner_mut().delegate).set_ivar(IVAR, selfptr);
-            let () = msg_send![app.inner_mut().app, setDelegate: app.inner_mut().delegate];
-
-            let selfptr = selfptr as usize;
-            Queue::main().exec_async(move || application_frame_runner(selfptr));
-
-            app
+    fn with_name<S: AsRef<str>>(name: S) -> Box<dyn controls::Application> {
+        let mut b: Box<mem::MaybeUninit<Application>> = Box::new_uninit();
+        let ab = AApplication::with_inner(
+            <Self as NewApplicationInner<Application>>::with_uninit_params(b.as_mut(), name.as_ref()),
+        );
+        let selfptr = b.as_ptr() as usize;
+        let a = unsafe {
+	        b.as_mut_ptr().write(ab);
+	        b.assume_init()
+        };
+        Queue::main().exec_async(move || application_frame_runner(selfptr));
+        a
+    }
+    fn add_root(&mut self, m: Box<dyn controls::Closeable>) -> &mut dyn controls::Member {
+        let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base };
+        
+        let is_window = m.as_any().type_id() == TypeId::of::<crate::window::Window>();
+        let is_tray = m.as_any().type_id() == TypeId::of::<crate::tray::Tray>();
+        
+        if is_window {
+            let i = base.windows.len();
+            base.windows.push(m.into_any().downcast::<crate::window::Window>().unwrap());
+            self.apply_execution_policy();
+            return base.windows[i].as_mut().as_member_mut();
         }
-    }
-    fn register_window(&mut self, window: &mut Box<dyn controls::Window>) {
-        unsafe {
-            self.windows.push(window.native_id() as cocoa_id);
+        
+        if is_tray {
+            let i = base.trays.len();
+            base.trays.push(m.into_any().downcast::<crate::tray::Tray>().unwrap());
+            self.apply_execution_policy();
+            return base.trays[i].as_mut().as_member_mut();
         }
-        self.apply_execution_policy();
+        
+        panic!("Unsupported Closeable: {:?}", m.as_any().type_id());
     }
-    fn register_tray(&mut self, tray: &mut Box<dyn controls::Tray>) {
-        self.trays.push(tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap());
-        self.apply_execution_policy();
-    }
-    fn unregister_window(&mut self, window: &mut dyn controls::Window) {
-        self.windows.retain(|i| *i != unsafe { window.native_id() } as cocoa_id);
-        self.apply_execution_policy();
-        self.maybe_exit();
-    }
-    fn unregister_tray(&mut self, tray: &mut dyn controls::Tray) {
-        self.trays.retain(|i| unsafe { controls::HasNativeId::native_id(&**i) != tray.native_id() });
-        self.apply_execution_policy();
-        self.maybe_exit();
+    fn close_root(&mut self, arg: types::FindBy, skip_callbacks: bool) -> bool {
+        let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
+        match arg {
+            types::FindBy::Id(id) => {
+                (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].id() == id 
+                    && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
+                        base.windows.remove(*i);
+                        self.apply_execution_policy();
+                        self.maybe_exit();
+                        true
+                    } else {
+                        false
+                }).is_some()
+                || 
+                (0..base.trays.len()).into_iter().find(|i| if base.trays[*i].id() == id 
+                    && base.trays[*i].as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(skip_callbacks) {
+                        base.trays.remove(*i);
+                        self.apply_execution_policy();
+                        self.maybe_exit();
+                        true
+                    } else {
+                        false
+                }).is_some()
+            }
+            types::FindBy::Tag(ref tag) => {
+                (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].tag().is_some() && base.windows[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
+                    && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
+                        base.windows.remove(*i);
+                        self.apply_execution_policy();
+                        self.maybe_exit();
+                        true
+                    } else {
+                        false
+                }).is_some()
+                || 
+                (0..base.trays.len()).into_iter().find(|i| if base.trays[*i].tag().is_some() && base.trays[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
+                    && base.trays[*i].as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(skip_callbacks) {
+                        base.trays.remove(*i);
+                        self.apply_execution_policy();
+                        self.maybe_exit();
+                        true
+                    } else {
+                        false
+                }).is_some()
+            }
+        }
     }
     fn name(&self) -> ::std::borrow::Cow<'_, str> {
         ::std::borrow::Cow::Borrowed(self.name.as_ref())
@@ -122,33 +178,30 @@ impl ApplicationInner for CocoaApplication {
         unsafe { self.app.run() };
     }
     fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
-        use plygui_api::controls::Member;
-
-        for window in self.windows.as_mut_slice() {
-            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
-                match arg {
-                    types::FindBy::Id(id) => {
-                        if window.id() == id {
+        let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
+        
+        for window in base.windows.as_mut_slice() {
+             match arg {
+                types::FindBy::Id(id) => {
+                    if window.id() == id {
+                        return Some(window.as_member_mut());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = window.tag() {
+                        if tag.as_str() == mytag {
                             return Some(window.as_member_mut());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
-                        if let Some(mytag) = window.tag() {
-                            if tag.as_str() == mytag {
-                                return Some(window.as_member_mut());
-                            }
-                        }
-                    }
-                }
-                let found = controls::Container::find_control_mut(window, arg.clone()).map(|control| control.as_member_mut());
-                if found.is_some() {
-                    return found;
                 }
             }
+            let found = controls::Container::find_control_mut(window.as_mut(), arg.clone()).map(|control| control.as_member_mut());
+            if found.is_some() {
+                return found;
+            }
         }
-        for tray in self.trays.as_mut_slice() {
-            let tray = unsafe { &mut **tray };
-            match arg {
+        for tray in base.trays.as_mut_slice() {
+        	match arg {
                 types::FindBy::Id(ref id) => {
                     if tray.id() == *id {
                         return Some(tray.as_member_mut());
@@ -166,32 +219,29 @@ impl ApplicationInner for CocoaApplication {
         None
     }
     fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
-        use plygui_api::controls::Member;
-
-        for window in self.windows.as_slice() {
-            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
-                match arg {
-                    types::FindBy::Id(id) => {
-                        if window.id() == id {
+        let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
+        
+        for window in base.windows.as_slice() {
+            match arg {
+                types::FindBy::Id(id) => {
+                    if window.id() == id {
+                        return Some(window.as_member());
+                    }
+                }
+                types::FindBy::Tag(ref tag) => {
+                    if let Some(mytag) = window.tag() {
+                        if tag.as_str() == mytag {
                             return Some(window.as_member());
                         }
                     }
-                    types::FindBy::Tag(ref tag) => {
-                        if let Some(mytag) = window.tag() {
-                            if tag.as_str() == mytag {
-                                return Some(window.as_member());
-                            }
-                        }
-                    }
-                }
-                let found = controls::Container::find_control(window, arg.clone()).map(|control| control.as_member());
-                if found.is_some() {
-                    return found;
                 }
             }
+            let found = controls::Container::find_control(window.as_ref(), arg.clone()).map(|control| control.as_member());
+            if found.is_some() {
+                return found;
+            }
         }
-        for tray in self.trays.as_slice() {
-            let tray = unsafe { &**tray };
+        for tray in base.trays.as_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
                     if tray.id() == *id {
@@ -210,116 +260,32 @@ impl ApplicationInner for CocoaApplication {
         None
     }
     #[allow(unused_comparisons)] // WAT?
-    fn exit(&mut self, skip_on_close: bool) -> bool {
-        let mut n = self.windows.len() as isize;
-        let mut i = n - 1;
-        while i >= 0 {
-            let window = &self.windows[i as usize];
-            if let Some(window) = unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) } {
-                if !controls::Closeable::close(window, skip_on_close) {
-                    return false;
-                }
-            }
-            i -= 1;
+    fn exit(&mut self) {
+        let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
+        
+        for mut window in base.windows.drain(..) {
+            window.as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(true);
+        }
+        for mut tray in base.trays.drain(..) {
+            tray.as_any_mut().downcast_mut::<crate::tray::Tray>().unwrap().inner_mut().close(true);
         }
 
-        n = self.trays.len() as isize;
-        i = n - 1;
-        while i >= 0 {
-            let tray = self.trays[i as usize];
-            if unsafe { !controls::Closeable::close(&mut *tray, skip_on_close) } {
-                return false;
-            }
-            i -= 1;
-        }
-
-        self.maybe_exit()
+        self.maybe_exit();
     }
-    fn members<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
-        Box::new(MemberIterator {
-            inner: self,
-            is_tray: false,
-            index: 0,
-            needs_window: true,
-            needs_tray: true,
-        })
+    fn roots<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (dyn controls::Member)> + 'a> {
+        unsafe { cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)) }.unwrap().roots()
     }
-    fn members_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
-        Box::new(MemberIteratorMut {
-            inner: self,
-            is_tray: false,
-            index: 0,
-            needs_window: true,
-            needs_tray: true,
-        })
+    fn roots_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut (dyn controls::Member)> + 'a> {
+        unsafe { cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)) }.unwrap().roots_mut()
     }
 }
 
 impl Drop for CocoaApplication {
     fn drop(&mut self) {
-        if self.exit(true) {
-            unsafe {
-                let () = msg_send![self.app, dealloc];
-                let () = msg_send![self.delegate, dealloc];
-            }
+        unsafe {
+            let () = msg_send![self.app, dealloc];
+            let () = msg_send![self.delegate, dealloc];
         }
-    }
-}
-
-struct MemberIterator<'a> {
-    inner: &'a CocoaApplication,
-    needs_window: bool,
-    needs_tray: bool,
-    is_tray: bool,
-    index: usize,
-}
-impl<'a> Iterator for MemberIterator<'a> {
-    type Item = &'a (dyn controls::Member + 'static);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.inner.windows.len() {
-            self.is_tray = true;
-            self.index = 0;
-        }
-        let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get(self.index).map(|tray| unsafe { &**tray } as &dyn controls::Member)
-        } else if self.needs_window {
-            self.inner.windows.get(self.index).map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &dyn controls::Member)
-        } else {
-            return None;
-        };
-        self.index += 1;
-        ret
-    }
-}
-
-struct MemberIteratorMut<'a> {
-    inner: &'a mut CocoaApplication,
-    needs_window: bool,
-    needs_tray: bool,
-    is_tray: bool,
-    index: usize,
-}
-impl<'a> Iterator for MemberIteratorMut<'a> {
-    type Item = &'a mut (dyn controls::Member);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.needs_tray && self.index >= self.inner.windows.len() {
-            self.is_tray = true;
-            self.index = 0;
-        }
-        let ret = if self.needs_tray && self.is_tray {
-            self.inner.trays.get_mut(self.index).map(|tray| unsafe { &mut **tray } as &mut dyn controls::Member)
-        } else if self.needs_window {
-            self.inner
-                .windows
-                .get_mut(self.index)
-                .map(|window| unsafe { member_from_cocoa_id_mut::<super::window::Window>(*window) }.unwrap() as &mut dyn controls::Member)
-        } else {
-            return None;
-        };
-        self.index += 1;
-        ret
     }
 }
 
@@ -355,7 +321,7 @@ fn application_frame_runner(selfptr: usize) {
     let mut frame_callbacks;
     {
         frame_callbacks = 0;
-        let b = app.base_mut();
+        let b = &mut app.base;
         while frame_callbacks < defaults::MAX_FRAME_CALLBACKS {
             match b.queue().try_recv() {
                 Ok(mut cmd) => {

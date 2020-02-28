@@ -1,4 +1,4 @@
-pub use plygui_api::development::*;
+pub use plygui_api::sdk::*;
 pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
 pub use plygui_api::external::image;
 
@@ -28,19 +28,16 @@ unsafe impl Sync for RefClass {}
 pub struct CocoaId(cocoa_id);
 
 impl From<cocoa_id> for CocoaId {
-    #[inline]
     fn from(a: cocoa_id) -> CocoaId {
         CocoaId(a)
     }
 }
 impl From<CocoaId> for cocoa_id {
-    #[inline]
     fn from(a: CocoaId) -> cocoa_id {
         a.0
     }
 }
 impl From<CocoaId> for usize {
-    #[inline]
     fn from(a: CocoaId) -> usize {
         a.0 as usize
     }

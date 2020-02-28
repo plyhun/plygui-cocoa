@@ -1,6 +1,7 @@
 use crate::common::{self, *};
 
 use cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
+use dispatch::Queue;
 
 lazy_static! {
     static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe {
@@ -20,7 +21,22 @@ pub struct CocoaTray {
     on_close: Option<callbacks::OnClose>,
 }
 
-pub type Tray = AMember<ATray<CocoaTray>>;
+pub type Tray = AMember<ACloseable<ATray<CocoaTray>>>;
+
+impl CocoaTray {
+    fn install_image(&mut self) {
+        unsafe {
+            let thickness: f64 = msg_send![NSStatusBar::systemStatusBar(nil), thickness];
+            let i = self.icon.resize(thickness as u32, thickness as u32, image::imageops::FilterType::Lanczos3);
+            
+        	let img = common::image_to_native(&i);
+        	let btn: cocoa_id = msg_send![self.tray, button];
+        	let () = msg_send![self.tray, setHighlightMode:YES];
+        	let () = msg_send![img, setTemplate:YES];
+        	let () = msg_send![btn, setImage:img];
+        }
+    }
+}
 
 impl HasLabelInner for CocoaTray {
     fn label(&self, _: &MemberBase) -> Cow<str> {
@@ -51,30 +67,26 @@ impl CloseableInner for CocoaTray {
             let status_bar: cocoa_id = NSStatusBar::systemStatusBar(ptr::null_mut());
             status_bar.removeStatusItem_(self.tray);
         }
-        let mut app = super::application::Application::get().unwrap();
-        app.as_any_mut().downcast_mut::<super::application::Application>().unwrap().inner_mut().unregister_tray(unsafe { &mut *self.this });
         true
     }
     fn on_close(&mut self, callback: Option<callbacks::OnClose>) {
         self.on_close = callback;
     }
+    fn application<'a>(&'a self, base: &'a MemberBase) -> &'a dyn controls::Application {
+        unsafe { utils::base_to_impl::<Tray>(base) }.inner().application_impl::<crate::application::Application>()
+    }
+    fn application_mut<'a>(&'a mut self, base: &'a mut MemberBase) -> &'a mut dyn controls::Application {
+        unsafe { utils::base_to_impl_mut::<Tray>(base) }.inner_mut().application_impl_mut::<crate::application::Application>()
+    }
 }
 
 impl HasImageInner for CocoaTray {
     fn image(&self, _base: &MemberBase) -> Cow<image::DynamicImage> {
-        unimplemented!()
+        Cow::Borrowed(&self.icon)
     }
     fn set_image(&mut self, _base: &mut MemberBase, i: Cow<image::DynamicImage>) {
-        unsafe {
-            let thickness: f64 = msg_send![NSStatusBar::systemStatusBar(nil), thickness];
-            let i = i.resize(thickness as u32, thickness as u32, image::imageops::FilterType::Lanczos3);
-            
-        	let img = common::image_to_native(&i);
-        	let btn: cocoa_id = msg_send![self.tray, button];
-        	let () = msg_send![self.tray, setHighlightMode:YES];
-        	let () = msg_send![img, setTemplate:YES];
-        	let () = msg_send![btn, setImage:img];
-        }
+        self.icon = i.into_owned();
+        self.install_image();
     }    
 }
 impl<O: controls::Tray> NewTrayInner<O> for CocoaTray {
@@ -90,26 +102,27 @@ impl<O: controls::Tray> NewTrayInner<O> for CocoaTray {
     }
 }
 impl TrayInner for CocoaTray {
-    fn with_params<S: AsRef<str>>(title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
+    fn with_params<S: AsRef<str>>(app: &mut dyn controls::Application, title: S, icon: image::DynamicImage, menu: types::Menu) -> Box<dyn controls::Tray> {
+        let app = app.as_any_mut().downcast_mut::<crate::application::Application>().unwrap();
+        
         let mut b: Box<mem::MaybeUninit<Tray>> = Box::new_uninit();
-        let app = crate::application::Application::get().unwrap();
         let ab = AMember::with_inner(
-            ATray::with_inner(
-                <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
-	            app,
+            ACloseable::with_inner(
+                ATray::with_inner(
+                    <Self as NewTrayInner<Tray>>::with_uninit_params(b.as_mut(), title.as_ref(), icon, types::Menu::None),
+    	        ),
+                app
             )
         );
         let mut t = unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
         };
-        let app = super::application::Application::get().unwrap();
-        let mut app = app.into_any().downcast::<crate::application::Application>().unwrap();
-        
         let status_bar: cocoa_id = unsafe { NSStatusBar::systemStatusBar(nil) };
-        t.inner_mut().inner_mut().tray = unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) };
+        t.inner_mut().inner_mut().inner_mut().tray = unsafe { status_bar.statusItemWithLength_(NSSquareStatusItemLength) };
         
         controls::HasLabel::set_label(t.as_mut(), title.as_ref().into());
+        t.inner_mut().inner_mut().inner_mut().install_image();
         
         let menu = match menu {
             Some(menu) => unsafe {
@@ -125,17 +138,15 @@ impl TrayInner for CocoaTray {
                 }
                 
                 let selfptr = t.as_mut() as *mut _ as *mut c_void;
-                common::make_menu(nsmenu, menu, &mut t.inner_mut().inner_mut().menu_actions, spawn, selfptr);
+                common::make_menu(nsmenu, menu, &mut t.inner_mut().inner_mut().inner_mut().menu_actions, spawn, selfptr);
                 nsmenu
             },
             None => nil,
         };
 
         unsafe {
-            let () = msg_send![t.inner_mut().inner_mut().tray, setMenu: menu];
+            let () = msg_send![t.inner_mut().inner_mut().inner_mut().tray, setMenu: menu];
         }
-        let mut t: Box<dyn controls::Tray> = t;
-        app.inner_mut().register_tray(&mut t);
         t
     }
 }
@@ -152,8 +163,15 @@ impl MemberInner for CocoaTray {}
 
 impl Drop for CocoaTray {
     fn drop(&mut self) {
-        self.close(true);
-        unsafe {
+        /*let mut ids = vec![self.tray as usize];
+        if !self.menu.is_null() {
+            ids.push(self.menu as usize);
+        }
+        for (k,_) in self.menu_actions.drain() {
+            ids.push(k as usize);
+        }
+        Queue::main().exec_async(move || drop_ids(ids));*/
+        /*unsafe {
             let () = msg_send![self.tray, dealloc];
             if !self.menu.is_null() {
                 let () = msg_send![self.menu, dealloc];
@@ -161,15 +179,21 @@ impl Drop for CocoaTray {
             for (k,_) in self.menu_actions.drain() {
                 let () = msg_send![k, dealloc];
             }
-        }
+        }*/
     }
 }
+/*
+fn drop_ids(mut ids: Vec<usize>) {
+    for id in ids.drain(..) {
+        unsafe { let () = msg_send![id as cocoa_id, dealloc]; }
+    }
+}*/
 
 extern "C" fn on_tray_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
     let key = this as cocoa_id;
     let tray = unsafe { common::member_from_cocoa_id_mut::<Tray>(this) }.unwrap();
     let tray2 = unsafe { common::member_from_cocoa_id_mut::<Tray>(this) }.unwrap();
-    if let Some(action) = tray.inner_mut().inner_mut().menu_actions.get_mut(&key) {
+    if let Some(action) = tray.inner_mut().inner_mut().inner_mut().menu_actions.get_mut(&key) {
         if !(action.as_mut())(tray2) {
             return NO;
         }
