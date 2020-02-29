@@ -276,7 +276,6 @@ impl Drop for CocoaWindow {
     fn drop(&mut self) {
         unsafe {
             self.container.removeFromSuperview();
-            
         }
     }
 }

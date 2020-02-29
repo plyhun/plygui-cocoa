@@ -1,7 +1,6 @@
 use crate::common::{self, *};
 
 use cocoa::appkit::{NSSquareStatusItemLength, NSStatusBar};
-use dispatch::Queue;
 
 lazy_static! {
     static ref PLYGUI_MENU_ITEM_CLASS: common::RefClass = unsafe {
@@ -160,34 +159,6 @@ impl HasNativeIdInner for CocoaTray {
 }
 
 impl MemberInner for CocoaTray {}
-
-impl Drop for CocoaTray {
-    fn drop(&mut self) {
-        /*let mut ids = vec![self.tray as usize];
-        if !self.menu.is_null() {
-            ids.push(self.menu as usize);
-        }
-        for (k,_) in self.menu_actions.drain() {
-            ids.push(k as usize);
-        }
-        Queue::main().exec_async(move || drop_ids(ids));*/
-        /*unsafe {
-            let () = msg_send![self.tray, dealloc];
-            if !self.menu.is_null() {
-                let () = msg_send![self.menu, dealloc];
-            }
-            for (k,_) in self.menu_actions.drain() {
-                let () = msg_send![k, dealloc];
-            }
-        }*/
-    }
-}
-/*
-fn drop_ids(mut ids: Vec<usize>) {
-    for id in ids.drain(..) {
-        unsafe { let () = msg_send![id as cocoa_id, dealloc]; }
-    }
-}*/
 
 extern "C" fn on_tray_menu_item_select(this: &mut Object, _: Sel, _: cocoa_id) -> BOOL {
     let key = this as cocoa_id;
