@@ -67,7 +67,7 @@ impl CloseableInner for CocoaWindow {
 }
 
 impl<O: controls::Window> NewWindowInner<O> for CocoaWindow {
-    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Self {
+    fn with_uninit_params(u: &mut mem::MaybeUninit<O>, _: &mut dyn controls::Application, title: &str, window_size: types::WindowStartSize, menu: types::Menu) -> Self {
         let selfptr = u as *mut _ as *mut c_void;
    		let rect: NSRect = match window_size {
             types::WindowStartSize::Exact(width, height) => NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width as f64, height as f64)),
@@ -144,7 +144,7 @@ impl WindowInner for CocoaWindow {
                 ASingleContainer::with_inner(
                     ACloseable::with_inner(
                         AWindow::with_inner(
-                            <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), title.as_ref(), window_size, menu),
+                            <Self as NewWindowInner<Window>>::with_uninit_params(b.as_mut(), app, title.as_ref(), window_size, menu),
     	                ),
                         app
                     )
