@@ -207,7 +207,7 @@ impl MultiContainerInner for CocoaSplitted {
 }
 
 impl ContainerInner for CocoaSplitted {
-    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
         match arg {
             types::FindBy::Id(id) => {
                 if self.first().as_member().id() == id {
@@ -217,14 +217,14 @@ impl ContainerInner for CocoaSplitted {
                     return Some(self.second_mut());
                 }
             }
-            types::FindBy::Tag(ref tag) => {
+            types::FindBy::Tag(tag) => {
                 if let Some(mytag) = self.first.as_member().tag() {
-                    if tag.as_str() == mytag {
+                    if tag == mytag {
                         return Some(self.first_mut());
                     }
                 }
                 if let Some(mytag) = self.second.as_member().tag() {
-                    if tag.as_str() == mytag {
+                    if tag == mytag {
                         return Some(self.second_mut());
                     }
                 }
@@ -246,7 +246,7 @@ impl ContainerInner for CocoaSplitted {
         }
         None
     }
-    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
+    fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
         match arg {
             types::FindBy::Id(id) => {
                 if self.first().as_member().id() == id {
@@ -256,14 +256,14 @@ impl ContainerInner for CocoaSplitted {
                     return Some(self.second());
                 }
             }
-            types::FindBy::Tag(ref tag) => {
+            types::FindBy::Tag(tag) => {
                 if let Some(mytag) = self.first.as_member().tag() {
-                    if tag.as_str() == mytag {
+                    if tag == mytag {
                         return Some(self.first.as_ref());
                     }
                 }
                 if let Some(mytag) = self.second.as_member().tag() {
-                    if tag.as_str() == mytag {
+                    if tag == mytag {
                         return Some(self.second.as_ref());
                     }
                 }

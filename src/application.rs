@@ -1,4 +1,8 @@
-use crate::common::{self, *};
+use super::common::*;
+use super::*;
+
+use plygui_api::controls;
+use plygui_api::types;
 
 use cocoa::appkit::{NSApplication, NSApplicationActivationPolicy};
 use dispatch::Queue;
@@ -142,7 +146,7 @@ impl ApplicationInner for CocoaApplication {
                         false
                 }).is_some()
             }
-            types::FindBy::Tag(ref tag) => {
+            types::FindBy::Tag(tag) => {
                 (0..base.windows.len()).into_iter().find(|i| if base.windows[*i].tag().is_some() && base.windows[*i].tag().unwrap() == Cow::Borrowed(tag.into()) 
                     && base.windows[*i].as_any_mut().downcast_mut::<crate::window::Window>().unwrap().inner_mut().inner_mut().inner_mut().inner_mut().close(skip_callbacks) {
                         base.windows.remove(*i);
@@ -177,7 +181,7 @@ impl ApplicationInner for CocoaApplication {
     fn start(&mut self) {
         unsafe { self.app.run() };
     }
-    fn find_member_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Member> {
+    fn find_member_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn Member> {
         let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
         
         for window in base.windows.as_mut_slice() {
@@ -187,9 +191,9 @@ impl ApplicationInner for CocoaApplication {
                         return Some(window.as_member_mut());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = window.tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(window.as_member_mut());
                         }
                     }
@@ -207,9 +211,9 @@ impl ApplicationInner for CocoaApplication {
                         return Some(tray.as_member_mut());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = tray.tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(tray.as_member_mut());
                         }
                     }
@@ -218,7 +222,7 @@ impl ApplicationInner for CocoaApplication {
         }
         None
     }
-    fn find_member(&self, arg: types::FindBy) -> Option<&dyn controls::Member> {
+    fn find_member<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn Member> {
         let base = unsafe { &mut cast_cocoa_id_to_ptr(self.app).map(|ptr| &mut *(ptr as *mut _ as *mut Application)).unwrap().base }; 
         
         for window in base.windows.as_slice() {
@@ -228,9 +232,9 @@ impl ApplicationInner for CocoaApplication {
                         return Some(window.as_member());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = window.tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(window.as_member());
                         }
                     }
@@ -248,9 +252,9 @@ impl ApplicationInner for CocoaApplication {
                         return Some(tray.as_member());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = tray.tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(tray.as_member());
                         }
                     }

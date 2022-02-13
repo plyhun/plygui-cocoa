@@ -1,5 +1,5 @@
 pub use plygui_api::sdk::*;
-pub use plygui_api::{callbacks, controls, defaults, ids, layout, types, utils};
+pub use plygui_api::{callbacks, controls, defaults, ids, layout, types::{self, adapter}, utils};
 pub use plygui_api::external::image;
 
 pub use std::borrow::Cow;
@@ -264,7 +264,7 @@ pub unsafe fn image_to_native(src: &image::DynamicImage) -> cocoa_id {
     let size = src.dimensions();
 
     let color_space = CGColorSpace::create_device_rgb();
-    let provider = CGDataProvider::from_buffer(Arc::new(src.to_rgba().into_raw()));
+    let provider = CGDataProvider::from_buffer(Arc::new(src.to_rgba8().into_raw()));
     let cgimage = CGImage::new(size.0 as usize, size.1 as usize, 8, 32, 4 * size.0 as usize, &color_space, kCGBitmapByteOrderDefault | kCGImageAlphaLast, &provider, true, 0);
 
     let img: cocoa_id = msg_send![class!(NSImage), alloc];
