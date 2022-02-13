@@ -128,7 +128,7 @@ impl MultiContainerInner for CocoaLinearLayout {
 }
 
 impl ContainerInner for CocoaLinearLayout {
-    fn find_control_mut(&mut self, arg: types::FindBy) -> Option<&mut dyn controls::Control> {
+    fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
         for child in self.children.as_mut_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
@@ -136,9 +136,9 @@ impl ContainerInner for CocoaLinearLayout {
                         return Some(child.as_mut());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member_mut().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_mut());
                         }
                     }
@@ -154,7 +154,7 @@ impl ContainerInner for CocoaLinearLayout {
         }
         None
     }
-    fn find_control(&self, arg: types::FindBy) -> Option<&dyn controls::Control> {
+    fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
         for child in self.children.as_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
@@ -162,9 +162,9 @@ impl ContainerInner for CocoaLinearLayout {
                         return Some(child.as_ref());
                     }
                 }
-                types::FindBy::Tag(ref tag) => {
+                types::FindBy::Tag(tag) => {
                     if let Some(mytag) = child.as_member().tag() {
-                        if tag.as_str() == mytag {
+                        if tag == mytag {
                             return Some(child.as_ref());
                         }
                     }
