@@ -6,9 +6,11 @@ lazy_static! {
         register_window_class("PlyguiTreeInner", "NSTableView", |decl| {
             decl.add_method(sel!(validateProposedFirstResponder:forEvent:), validate_proposed_first_responder as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
             decl.add_method(sel!(itemClicked:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
-            decl.add_method(sel!(numberOfRowsInTableView:), datasource_len as extern "C" fn(&mut Object, Sel, cocoa_id) -> NSInteger);
             decl.add_method(sel!(tableView:heightOfRow:), get_item_height as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger) -> f64);
-            decl.add_method(sel!(tableView:viewForTableColumn:row:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, NSInteger) -> cocoa_id);
+             decl.add_method(sel!(outlineView:numberOfChildrenOfItem:), children_len as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> NSInteger);
+             decl.add_method(sel!(outlineView:isItemExpandable:), has_children as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
+             decl.add_method(sel!(outlineView:child:ofItem:), child_at as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger, cocoa_id) -> cocoa_id);
+             decl.add_method(sel!(outlineView:objectValueForTableColumn:byItem:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, cocoa_id) -> cocoa_id);
         })
     };
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -349,7 +351,16 @@ extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSIntege
         sp.inner().inner().inner().base.adapter.len_at(&[]).unwrap() as i64
     }
 }
-extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, _: cocoa_id, row: NSInteger) -> cocoa_id {
+extern "C" fn children_len(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> NSInteger {
+    0
+}
+extern "C" fn has_children(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    NO
+}
+extern "C" fn child_at(this: &mut Object, _:Sel, _:cocoa_id, index: NSInteger, item: cocoa_id) -> cocoa_id {
+    nil
+}
+extern "C" fn spawn_item(this: &mut Object, _:Sel, _:cocoa_id, column: cocoa_id, item: cocoa_id) -> cocoa_id {
     let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
     unsafe { sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items[row as usize].native_id() as cocoa_id }
 }
