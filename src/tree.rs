@@ -6,11 +6,14 @@ lazy_static! {
         register_window_class("PlyguiTreeInner", "NSTableView", |decl| {
             decl.add_method(sel!(validateProposedFirstResponder:forEvent:), validate_proposed_first_responder as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
             decl.add_method(sel!(itemClicked:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
-            decl.add_method(sel!(tableView:heightOfRow:), get_item_height as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger) -> f64);
+            decl.add_method(sel!(outlineView:heightOfRowByItem:), get_item_height as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> f64);
              decl.add_method(sel!(outlineView:numberOfChildrenOfItem:), children_len as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> NSInteger);
              decl.add_method(sel!(outlineView:isItemExpandable:), has_children as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
              decl.add_method(sel!(outlineView:child:ofItem:), child_at as extern "C" fn(&mut Object, Sel, cocoa_id, NSInteger, cocoa_id) -> cocoa_id);
-             decl.add_method(sel!(outlineView:objectValueForTableColumn:byItem:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, cocoa_id) -> cocoa_id);
+             decl.add_method(sel!(outlineView:objectValueForTableColumn:byItem:), get_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, cocoa_id) -> cocoa_id);
+             decl.add_method(sel!(outlineView:shouldCollapseItem:), should_collapse as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
+             decl.add_method(sel!(outlineView:shouldExpandItem:), should_expand as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
+            decl.add_method(sel!(outlineView:viewForTableColumn:item:), spawn_item as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id, cocoa_id) -> cocoa_id);
         })
     };
     static ref WINDOW_CLASS: common::RefClass = unsafe {
@@ -20,32 +23,113 @@ lazy_static! {
     };
 }
 
+struct TreeNode<T: Sized> {
+    pub expanded: bool,
+    pub root: Box<dyn controls::Control>,
+    pub native: T,
+    pub branches: Vec<Box<Self>>,
+}
+struct TreeNodeList<T: Sized> (pub Vec<Box<TreeNode<T>>>);
+
 pub type Tree = AMember<AControl<AContainer<AAdapted<ATree<CocoaTree>>>>>;
 
 #[repr(C)]
 pub struct CocoaTree {
     base: common::CocoaControlBase<Tree>,
     table: cocoa_id,
-    items: Vec<Box<dyn controls::Control>>,
+    items: TreeNodeList<cocoa_id>,
     on_item_click: Option<callbacks::OnItemClick>
 }
 
 impl CocoaTree {
-    fn add_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
-        let i = indexes[0];
+    fn add_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], node: &adapter::Node) {
         let (member, control, adapter, _) = unsafe { Tree::adapter_base_parts_mut(base) };
         let (pw, ph) = control.measured;
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(member) };
         
-        let mut item = adapter.adapter.spawn_item_view(indexes, this).unwrap();
-        item.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
+        let mut item = adapter.adapter.spawn_item_view(indexes, this);
+        let mut id = item.map(|item1| item1.native_id()).unwrap();
+        let mut items = &mut self.items.0;
+        let mut parent = None;
+        for i in 0..indexes.len() {
+            let index = indexes[i];
+            let end = i+1 >= indexes.len();
+            if end {
+            	items.insert(index, Box::new(TreeNode {
+                    expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
+                    root: item.take().unwrap(),
+                    branches: vec![],
+                    native: id as cocoa_id,
+                }));
                 
-        self.items.insert(i, item);
+                //add_native_item(this, items, index, parent, pw, ph);
+                //return;
+            } else {
+            	parent = Some((items[index].native, items[index].expanded));
+                items = &mut items[index].branches;
+            }
+        }
     }
     fn remove_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize]) {
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(base) };
-        self.items.remove(indexes[0]).on_removed_from_container(this); 
-    }    
+        let mut items = &mut self.items.0;
+        for i in 0..indexes.len() {
+            let index = indexes[i];
+                
+            if i+1 >= indexes.len() {
+                if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, items[index].native as isize) } {
+	                unsafe { common::log_error(); }
+	            } else {
+	            	remove_native_item(this, items, index);
+	            }
+            } else {
+                items = &mut items[index].branches;
+            }
+        }
+    }
+    fn update_item_inner(&mut self, base: &mut MemberBase, indexes: &[usize], node: &adapter::Node) {
+    	let (member, control, adapter, _) = unsafe { Tree::adapter_base_parts_mut(base) };
+        let (pw, ph) = control.measured;
+        let this: &mut Tree = unsafe { utils::base_to_impl_mut(member) };
+        
+        let mut item = adapter.adapter.spawn_item_view(indexes, this);
+			        
+		let mut items = &mut self.items.0;
+        let mut parent = None;
+        for i in 0..indexes.len() {
+            let index = indexes[i];
+                
+            if i+1 >= indexes.len() {
+                let mut deleted = items.remove(index);
+	            if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, deleted.native as isize) } {
+	                unsafe { common::log_error(); }
+	            } else {
+	            	deleted.root.on_removed_from_container(this);
+		            items.insert(index, TreeNode {
+	                    expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
+	                    root: item.take().unwrap(),
+	                    branches: vec![],
+	                    native: ptr::null_mut(),
+	                });
+	            	add_native_item(this, items, index, parent, pw, ph);
+                
+	                match items[index].node() {
+	                	adapter::Node::Branch(expanded) => {
+	                		for i in 0..items[index].branches.len() {
+	                			let native = items[index].native;
+	                			add_native_item(this, &mut items[index].branches, i, Some((native, expanded)), pw, ph);
+	                		}
+	                	},
+	                	_ => {}
+	                }
+	            }
+            } else {
+            	parent = Some((items[index].native, items[index].expanded));
+                items = &mut items[index].branches;
+            }
+        }
+        //unsafe { self.redraw_visible() }
+    }  
 }
 
 impl<O: controls::Tree> NewTreeInner<O> for CocoaTree {
@@ -60,7 +144,7 @@ impl<O: controls::Tree> NewTreeInner<O> for CocoaTree {
                 control
             },
             on_item_click: None,
-            items: Vec::new(),
+            items: TreeNodeList(Vec::new()),
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
@@ -107,7 +191,7 @@ impl TreeInner for CocoaTree {
                 )
             ),
         );
-        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = Vec::new();
+        ab.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items = TreeNodeList(Vec::new());
         unsafe {
 	        b.as_mut_ptr().write(ab);
 	        b.assume_init()
@@ -130,13 +214,14 @@ impl ItemClickableInner for CocoaTree {
 impl AdaptedInner for CocoaTree {
     fn on_item_change(&mut self, base: &mut MemberBase, value: adapter::Change) {
         match value {
-            adapter::Change::Added(at, _) => {
-                self.add_item_inner(base, at);
+            adapter::Change::Added(at, ref node) => {
+                self.add_item_inner(base, at, node);
             },
             adapter::Change::Removed(at) => {
                 self.remove_item_inner(base, at);
             },
-            adapter::Change::Edited(_,_) => {
+            adapter::Change::Edited(at, ref node) => {
+                self.update_item_inner(base, at, node);
             },
         }
         unsafe {
@@ -148,22 +233,22 @@ impl AdaptedInner for CocoaTree {
 
 impl ContainerInner for CocoaTree {
     fn find_control_mut<'a>(&'a mut self, arg: types::FindBy<'a>) -> Option<&'a mut dyn controls::Control> {
-        for child in self.items.as_mut_slice() {
+        for child in self.items.0.as_mut_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
-                    if child.as_member_mut().id() == *id {
-                        return Some(child.as_mut());
+                    if child.root.as_member_mut().id() == *id {
+                        return Some(child.root.as_mut());
                     }
                 }
                 types::FindBy::Tag(tag) => {
-                    if let Some(mytag) = child.as_member_mut().tag() {
+                    if let Some(mytag) = child.root.as_member_mut().tag() {
                         if tag == mytag {
-                            return Some(child.as_mut());
+                            return Some(child.root.as_mut());
                         }
                     }
                 }
             }
-            if let Some(c) = child.is_container_mut() {
+            if let Some(c) = child.root.is_container_mut() {
                 let ret = c.find_control_mut(arg.clone());
                 if ret.is_none() {
                     continue;
@@ -174,22 +259,22 @@ impl ContainerInner for CocoaTree {
         None
     }
     fn find_control<'a>(&'a self, arg: types::FindBy<'a>) -> Option<&'a dyn controls::Control> {
-        for child in self.items.as_slice() {
+        for child in self.items.0.as_slice() {
             match arg {
                 types::FindBy::Id(ref id) => {
-                    if child.as_member().id() == *id {
-                        return Some(child.as_ref());
+                    if child.root.as_member().id() == *id {
+                        return Some(child.root.as_ref());
                     }
                 }
                 types::FindBy::Tag(tag) => {
-                    if let Some(mytag) = child.as_member().tag() {
+                    if let Some(mytag) = child.root.as_member().tag() {
                         if tag == mytag {
-                            return Some(child.as_ref());
+                            return Some(child.root.as_ref());
                         }
                     }
                 }
             }
-            if let Some(c) = child.is_container() {
+            if let Some(c) = child.root.is_container() {
                 let ret = c.find_control(arg.clone());
                 if ret.is_none() {
                     continue;
@@ -198,6 +283,9 @@ impl ContainerInner for CocoaTree {
             }
         }
         None
+    }
+    fn native_container_id(&self) -> Self::Id {
+        self.table.into()
     }
 }
 
@@ -209,8 +297,8 @@ impl ControlInner for CocoaTree {
         
         let (member, _, adapter, _) = unsafe { Tree::adapter_base_parts_mut(member) };
 
-        adapter.adapter.for_each(&mut (|indexes, _node| {
-            self.add_item_inner(member, indexes);
+        adapter.adapter.for_each(&mut (|indexes, node| {
+            self.add_item_inner(member, indexes, node);
         }));
         unsafe {                            
             let () = msg_send![self.table, setDelegate: self.table];
@@ -224,8 +312,8 @@ impl ControlInner for CocoaTree {
             let () = msg_send![self.table, setDataSource: nil];
         }
         let ll2: &Tree = unsafe { common::member_from_cocoa_id(self.base.control).unwrap() };
-        for ref mut child in self.items.as_mut_slice() {
-            child.on_removed_from_container(ll2);
+        for ref mut child in self.items.0.as_mut_slice() {
+            child.root.on_removed_from_container(ll2);
         }
         unsafe {
             self.base.on_removed_from_container();
@@ -315,8 +403,8 @@ impl Drawable for CocoaTree {
 impl Drop for CocoaTree {
     fn drop(&mut self) {
         let ll: &Tree = unsafe { common::member_from_cocoa_id(self.base.control).unwrap() };
-        for ref mut child in self.items.as_mut_slice() {
-            child.on_removed_from_container(ll);
+        for ref mut child in self.items.0.as_mut_slice() {
+            child.root.on_removed_from_container(ll);
         }
         unsafe {
             let () = msg_send![self.table, release];
@@ -345,28 +433,48 @@ impl Spawnable for CocoaTree {
     }
 }
 
-extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSInteger {
-    unsafe {
-        let sp = common::member_from_cocoa_id::<Tree>(this).unwrap();
-        sp.inner().inner().inner().base.adapter.len_at(&[]).unwrap() as i64
-    }
-}
 extern "C" fn children_len(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> NSInteger {
-    0
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    node.branches.len() as NSInteger
 }
 extern "C" fn has_children(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
-    NO
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    if node.branches.len() > 0 { YES } else { NO }
+}
+extern "C" fn should_collapse(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    if node.branches.expanded { NO } else { YES }
+}
+extern "C" fn should_expand(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    if node.branches.expanded { YES } else { NO }
 }
 extern "C" fn child_at(this: &mut Object, _:Sel, _:cocoa_id, index: NSInteger, item: cocoa_id) -> cocoa_id {
-    nil
+    if let Some(sp) = unsafe { common::member_from_cocoa_id_mut::<Tree>(item) } {
+        sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.0[index as usize].as_mut() as *mut _ as cocoa_id
+    } else {
+        let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+        node.branches[index as usize].as_mut() as *mut _ as cocoa_id
+    }
 }
 extern "C" fn spawn_item(this: &mut Object, _:Sel, _:cocoa_id, column: cocoa_id, item: cocoa_id) -> cocoa_id {
     let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    unsafe { sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items[row as usize].native_id() as cocoa_id }
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    node.native
 }
-extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, row: NSInteger) -> f64 {
-    let sp = unsafe { common::member_from_cocoa_id::<Tree>(this).unwrap() };
-    let (_, h) = sp.inner().inner().inner().inner().inner().items[row as usize].size();
+extern "C" fn get_item(this: &mut Object, _:Sel, _:cocoa_id, column: cocoa_id, item: cocoa_id) -> cocoa_id {
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    node.native
+}
+extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, item: cocoa_id) -> f64 {
+    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
+    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+    let (_, h) = node.root.size();
     h as f64
 }
 extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
@@ -379,7 +487,7 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
     let item_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
     if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
         let sp2 = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-        (callback.as_mut())(sp2, &[i as usize], item_view.as_mut());
+        (callback.as_mut())(sp2, &[i as usize], item_view.root.as_mut());
     }
 }
 extern "C" fn validate_proposed_first_responder(_: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
