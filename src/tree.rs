@@ -3,9 +3,9 @@ use cocoa::appkit::NSViewHeightSizable;
 
 lazy_static! {
     static ref WINDOW_CLASS_INNER: common::RefClass = unsafe {
-        register_window_class("PlyguiTreeInner", "NSTableView", |decl| {
+        register_window_class("PlyguiTreeInner", "NSOutlineView", |decl| {
             decl.add_method(sel!(validateProposedFirstResponder:forEvent:), validate_proposed_first_responder as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
-            decl.add_method(sel!(itemClicked:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
+            decl.add_method(sel!(outlineViewSelectionDidChange:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(outlineView:heightOfRowByItem:), get_item_height as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> f64);
              decl.add_method(sel!(outlineView:numberOfChildrenOfItem:), children_len as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> NSInteger);
              decl.add_method(sel!(outlineView:isItemExpandable:), has_children as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
@@ -48,7 +48,7 @@ impl CocoaTree {
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(member) };
         
         let mut item = adapter.adapter.spawn_item_view(indexes, this);
-        let mut id = item.map(|item1| item1.native_id()).unwrap();
+        let mut id = item.as_ref().map(|item1| unsafe { item1.native_id() }).unwrap();
         let mut items = &mut self.items.0;
         let mut parent = None;
         for i in 0..indexes.len() {
@@ -77,11 +77,8 @@ impl CocoaTree {
             let index = indexes[i];
                 
             if i+1 >= indexes.len() {
-                if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, items[index].native as isize) } {
-	                unsafe { common::log_error(); }
-	            } else {
-	            	remove_native_item(this, items, index);
-	            }
+                let mut deleted = items.remove(index);
+	            deleted.root.on_removed_from_container(this);
             } else {
                 items = &mut items[index].branches;
             }
@@ -101,28 +98,13 @@ impl CocoaTree {
                 
             if i+1 >= indexes.len() {
                 let mut deleted = items.remove(index);
-	            if minwindef::TRUE as isize != unsafe { winuser::SendMessageW(self.hwnd_tree, winapi::um::commctrl::TVM_DELETEITEM, 0, deleted.native as isize) } {
-	                unsafe { common::log_error(); }
-	            } else {
-	            	deleted.root.on_removed_from_container(this);
-		            items.insert(index, TreeNode {
-	                    expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
-	                    root: item.take().unwrap(),
-	                    branches: vec![],
-	                    native: ptr::null_mut(),
-	                });
-	            	add_native_item(this, items, index, parent, pw, ph);
-                
-	                match items[index].node() {
-	                	adapter::Node::Branch(expanded) => {
-	                		for i in 0..items[index].branches.len() {
-	                			let native = items[index].native;
-	                			add_native_item(this, &mut items[index].branches, i, Some((native, expanded)), pw, ph);
-	                		}
-	                	},
-	                	_ => {}
-	                }
-	            }
+	            deleted.root.on_removed_from_container(this);
+	            items.insert(index, Box::new(TreeNode {
+                    expanded: if let adapter::Node::Branch(expanded) = node { *expanded } else { false },
+                    root: item.take().unwrap(),
+                    branches: vec![],
+                    native: ptr::null_mut(),
+                }));
             } else {
             	parent = Some((items[index].native, items[index].expanded));
                 items = &mut items[index].branches;
@@ -159,9 +141,9 @@ impl<O: controls::Tree> NewTreeInner<O> for CocoaTree {
             let () = msg_send![table, addTableColumn: column];
             
             let () = msg_send![table, setTarget: table];
-            let () = msg_send![table, setAction: sel!(itemClicked:)];
+            let () = msg_send![table, setAction: sel!(outlineViewSelectionDidChange:)];
             let () = msg_send![table, setFocusRingType:1 as NSUInteger];
-            	let () = msg_send![table, setHeaderView: nil];
+            let () = msg_send![table, setHeaderView: nil];
         	
             let () = msg_send![control, setAutohidesScrollers: NO];
             let () = msg_send![control, setHasHorizontalScroller: NO];
@@ -433,58 +415,56 @@ impl Spawnable for CocoaTree {
     }
 }
 
-extern "C" fn children_len(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> NSInteger {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+extern "C" fn children_len(_: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> NSInteger {
+    println!("children len {:?}", item);
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) };
     node.branches.len() as NSInteger
 }
-extern "C" fn has_children(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+extern "C" fn has_children(_: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) };
     if node.branches.len() > 0 { YES } else { NO }
 }
-extern "C" fn should_collapse(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
-    if node.branches.expanded { NO } else { YES }
+extern "C" fn should_collapse(_: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) };
+    if node.expanded { NO } else { YES }
 }
-extern "C" fn should_expand(this: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
-    if node.branches.expanded { YES } else { NO }
+extern "C" fn should_expand(_: &mut Object, _:Sel, _:cocoa_id, item: cocoa_id) -> BOOL {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) };
+    if node.expanded { YES } else { NO }
 }
-extern "C" fn child_at(this: &mut Object, _:Sel, _:cocoa_id, index: NSInteger, item: cocoa_id) -> cocoa_id {
+extern "C" fn child_at(_: &mut Object, _:Sel, _:cocoa_id, index: NSInteger, item: cocoa_id) -> cocoa_id {
+    println!("child at {:?}", item);
     if let Some(sp) = unsafe { common::member_from_cocoa_id_mut::<Tree>(item) } {
         sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.0[index as usize].as_mut() as *mut _ as cocoa_id
     } else {
-        let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+        let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) } ;
         node.branches[index as usize].as_mut() as *mut _ as cocoa_id
     }
 }
-extern "C" fn spawn_item(this: &mut Object, _:Sel, _:cocoa_id, column: cocoa_id, item: cocoa_id) -> cocoa_id {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+extern "C" fn spawn_item(_: &mut Object, _:Sel, _:cocoa_id, _column: cocoa_id, item: cocoa_id) -> cocoa_id {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) } ;
     node.native
 }
-extern "C" fn get_item(this: &mut Object, _:Sel, _:cocoa_id, column: cocoa_id, item: cocoa_id) -> cocoa_id {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+extern "C" fn get_item(_: &mut Object, _:Sel, _:cocoa_id, _column: cocoa_id, item: cocoa_id) -> cocoa_id {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) } ;
     node.native
 }
-extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, item: cocoa_id) -> f64 {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let node = mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item);
+extern "C" fn get_item_height(_: &mut Object, _: Sel, _: cocoa_id, item: cocoa_id) -> f64 {
+    let node = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item) } ;
     let (_, h) = node.root.size();
     h as f64
 }
 extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
-    let sp = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
     let sp2 = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
     let i: NSInteger = unsafe { msg_send![this, clickedRow] };
     if i < 0 {
         return;
     }
-    let item_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().items.get_mut(i as usize).unwrap();
+    let item_view: cocoa_id = unsafe { msg_send![this, itemAtRow: i] };
+    if (nil == item_view) {
+        panic!("No item at clicked index: {}", i);
+    }
+    let item_view = unsafe { mem::transmute::<cocoa_id, &mut TreeNode<cocoa_id>>(item_view) };
     if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
         let sp2 = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
         (callback.as_mut())(sp2, &[i as usize], item_view.root.as_mut());
