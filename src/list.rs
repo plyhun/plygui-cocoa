@@ -373,7 +373,7 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
         (callback.as_mut())(sp2, &[i as usize], item_view.as_mut());
     }
 }
-extern "C" fn validate_proposed_first_responder(this: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
+extern "C" fn validate_proposed_first_responder(_: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
     let evt_type: NSEventType = unsafe { evt.eventType() };
     match evt_type {
         NSEventType::NSLeftMouseUp => unsafe { msg_send![responder, isKindOfClass: class!(NSButton)] },
