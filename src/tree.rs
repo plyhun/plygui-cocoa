@@ -95,8 +95,8 @@ impl CocoaTree {
         let (pw, ph) = control.measured;
         let this: &mut Tree = unsafe { utils::base_to_impl_mut(member) };
         
-        let mut view = adapter.adapter.spawn_item_view(indexes, this);
-		let id = view.as_ref().map(|item1| unsafe { item1.native_id() }).unwrap();
+        let mut view = adapter.adapter.spawn_item_view(indexes, this).unwrap();
+		let id = unsafe { view.native_id() };
 			        
 		let mut items = self.items;
         for i in 0..indexes.len() {
@@ -105,12 +105,19 @@ impl CocoaTree {
                 if i+1 >= indexes.len() {
                     let deleted: cocoa_id = msg_send![items, objectAtIndex:index];
                     remove_item(deleted, index, items, this);
-    	            (&mut *deleted).set_ivar("expanded", if let adapter::Node::Branch(expanded) = node { if *expanded { YES } else { NO } } else { NO });
-                	(&mut *deleted).set_ivar("native", id);
-                	(&mut *deleted).set_ivar("root", Box::into_raw(Box::new(view.as_mut().map(|view| {
-                    	            view.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
-                                    view
-                	            }).take().unwrap())) as *mut c_void);
+
+                    view.on_added_to_container(this, 0, 0, utils::coord_to_size(pw as i32) as u16, utils::coord_to_size(ph as i32) as u16);
+                    let view = Box::into_raw(Box::new(view));
+
+    	            let item: cocoa_id = msg_send![NODE_CLASS.0, alloc];
+                    let branches: cocoa_id = msg_send![class!(NSMutableArray), alloc];
+                    let branches: cocoa_id = msg_send![branches, init];
+                    (&mut *item).set_ivar("expanded", if let adapter::Node::Branch(expanded) = node { if *expanded { YES } else { NO } } else { NO });
+                	(&mut *item).set_ivar("branches", branches);
+                	(&mut *item).set_ivar("native", id as cocoa_id);
+                	(&mut *item).set_ivar("root", view as *mut c_void);
+                    let () = msg_send![items, insertObject:item atIndex:index];
+                    return;
                 } else {
                 	items = msg_send![items, objectAtIndex:index];
                 	items = *(&mut *items).get_ivar::<cocoa_id>("branches");
@@ -504,24 +511,24 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, item: cocoa_id) {
     if nil == item {
         panic!("No item at clicked index: {}", i);
     }
+    let mut indices = Vec::new();
+    let mut current = item;
+    while {
+        let i: NSInteger = unsafe { msg_send![this, childIndexForItem:current] };
+        current = unsafe { msg_send![this, parentForItem:current] };
+        indices.insert(0, i as usize);
+        nil != current
+    } {}
     let root = unsafe { &mut *(*(&mut *item).get_ivar::<*mut c_void>("root") as *mut Box<dyn controls::Control>) };
     if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
         let sp2 = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-        (callback.as_mut())(sp2, &[i as usize], root.as_mut());
+        (callback.as_mut())(sp2, indices.as_slice(), root.as_mut());
     }
 }
-extern "C" fn validate_proposed_first_responder(this: &mut Object, sel: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
+extern "C" fn validate_proposed_first_responder(this: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
     let evt_type: NSEventType = unsafe { evt.eventType() };
     match evt_type {
-        NSEventType::NSLeftMouseDown => unsafe { 
-            let is_button: BOOL = msg_send![responder, isKindOfClass: class!(NSButton)];
-//            if NO == is_button {
-//                item_clicked(this, sel, responder);
-//                msg_send![super(this, Class::get(BASE_CLASS).unwrap()), validateProposedFirstResponder:responder forEvent:evt]
-//            } else {
-                is_button
-//            }
-        },
+        NSEventType::NSLeftMouseDown => unsafe { msg_send![responder, isKindOfClass: class!(NSButton)] },
         _ => unsafe { msg_send![super(this, Class::get(BASE_CLASS).unwrap()), validateProposedFirstResponder:responder forEvent:evt] }
     }
 }
