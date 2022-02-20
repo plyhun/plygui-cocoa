@@ -416,7 +416,7 @@ impl Drop for CocoaTree {
         unsafe {
             let this: &mut Tree = common::member_from_cocoa_id_mut(self.base.control).unwrap();
             let len = msg_send![self.items, count];
-            for i in 0..len {
+            for i in (0..len).rev() {
                 let child: cocoa_id = msg_send![self.items, objectAtIndex:i];
                 remove_item(child, i, self.items, this);
             }
@@ -496,12 +496,12 @@ extern "C" fn get_item_height(_: &mut Object, _: Sel, _: cocoa_id, item: cocoa_i
 extern "C" fn item_clicked(this: &mut Object, _: Sel, item: cocoa_id) {
     println!(" == clicked at {:?}", item);
     let sp2 = unsafe { common::member_from_cocoa_id_mut::<Tree>(this).unwrap() };
-    let i: NSInteger = unsafe { msg_send![this, clickedRow] };
+    let i: NSInteger = unsafe { msg_send![this, selectedRow] };
     if i < 0 {
         return;
     }
-    let item_view: cocoa_id = unsafe { msg_send![this, itemAtRow: i] };
-    if nil == item_view {
+    let item: cocoa_id = unsafe { msg_send![this, itemAtRow: i] };
+    if nil == item {
         panic!("No item at clicked index: {}", i);
     }
     let root = unsafe { &mut *(*(&mut *item).get_ivar::<*mut c_void>("root") as *mut Box<dyn controls::Control>) };
@@ -510,23 +510,31 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, item: cocoa_id) {
         (callback.as_mut())(sp2, &[i as usize], root.as_mut());
     }
 }
-extern "C" fn validate_proposed_first_responder(this: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
+extern "C" fn validate_proposed_first_responder(this: &mut Object, sel: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
     let evt_type: NSEventType = unsafe { evt.eventType() };
-    println!(" == event {:?}", evt_type);
     match evt_type {
-        NSEventType::NSLeftMouseUp => unsafe { msg_send![responder, isKindOfClass: class!(NSButton)] },
+        NSEventType::NSLeftMouseDown => unsafe { 
+            let is_button: BOOL = msg_send![responder, isKindOfClass: class!(NSButton)];
+//            if NO == is_button {
+//                item_clicked(this, sel, responder);
+//                msg_send![super(this, Class::get(BASE_CLASS).unwrap()), validateProposedFirstResponder:responder forEvent:evt]
+//            } else {
+                is_button
+//            }
+        },
         _ => unsafe { msg_send![super(this, Class::get(BASE_CLASS).unwrap()), validateProposedFirstResponder:responder forEvent:evt] }
     }
 }
 unsafe fn remove_item(item: cocoa_id, index: usize, parent: cocoa_id, this: &mut Tree) {
     let branches = *(&mut *item).get_ivar::<cocoa_id>("branches");
     let len = msg_send![branches, count];
-    for i in 0..len {
+    for i in (0..len).rev() {
         let child: cocoa_id = msg_send![branches, objectAtIndex:index];
         remove_item(child, i, branches, this);
     }
-    let () = msg_send![parent, removeObjectAtIndex:index];
     let root = *(&mut *item).get_ivar::<*mut c_void>("root") as *mut Box<dyn controls::Control>;
     let mut root = Box::from_raw(root);
     root.on_removed_from_container(this);
+    let () = msg_send![parent, removeObjectAtIndex:index];
+    let () = msg_send![branches, release];
 }
