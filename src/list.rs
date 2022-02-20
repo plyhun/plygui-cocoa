@@ -1,9 +1,11 @@
 use crate::common::{self, *};
 use cocoa::appkit::NSViewHeightSizable;
 
+const BASE_CLASS: &str = "NSTableView";
+
 lazy_static! {
     static ref WINDOW_CLASS_INNER: common::RefClass = unsafe {
-        register_window_class("PlyguiListInner", "NSTableView", |decl| {
+        register_window_class("PlyguiListInner", BASE_CLASS, |decl| {
             decl.add_method(sel!(validateProposedFirstResponder:forEvent:), validate_proposed_first_responder as extern "C" fn(&mut Object, Sel, cocoa_id, cocoa_id) -> BOOL);
             decl.add_method(sel!(itemClicked:), item_clicked as extern "C" fn(&mut Object, Sel, cocoa_id));
             decl.add_method(sel!(numberOfRowsInTableView:), datasource_len as extern "C" fn(&mut Object, Sel, cocoa_id) -> NSInteger);
@@ -371,7 +373,7 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
         (callback.as_mut())(sp2, &[i as usize], item_view.as_mut());
     }
 }
-extern "C" fn validate_proposed_first_responder(_: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
+extern "C" fn validate_proposed_first_responder(this: &mut Object, _: Sel, responder: cocoa_id, evt: cocoa_id) -> BOOL {
     let evt_type: NSEventType = unsafe { evt.eventType() };
     match evt_type {
         NSEventType::NSLeftMouseUp => unsafe { msg_send![responder, isKindOfClass: class!(NSButton)] },
