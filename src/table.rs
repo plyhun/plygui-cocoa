@@ -1,4 +1,4 @@
-use crate::{common::{self, matrix::*, *}, table};
+use crate::common::{self, *};
 use cocoa::appkit::NSViewHeightSizable;
 
 const BASE_CLASS: &str = "NSTableView";
@@ -26,7 +26,8 @@ pub type Table = AMember<AControl<AContainer<AAdapted<ATable<CocoaTable>>>>>;
 pub struct CocoaTable {
     base: common::CocoaControlBase<Table>,
     table: cocoa_id,
-    data: Matrix<Box<dyn controls::Control>>,
+    header: cocoa_id,
+    items: Vec<Box<dyn controls::Control>>,
     on_item_click: Option<callbacks::OnItemClick>
 }
 
@@ -52,15 +53,17 @@ impl<O: controls::Table> NewTableInner<O> for CocoaTable {
     fn with_uninit_params(ptr: &mut mem::MaybeUninit<O>, width: usize, height: usize) -> Self {
         let base = common::CocoaControlBase::with_params(*WINDOW_CLASS, set_frame_size_inner::<O>);
         let base_bounds: NSRect = unsafe { msg_send![base.control, bounds] };
+        let control = unsafe {
+            let mut control: cocoa_id = msg_send![WINDOW_CLASS_INNER.0, alloc];
+            control = msg_send![control, initWithFrame: base_bounds];
+            control
+        };
         let li = CocoaTable {
             base: base,
-            table: unsafe {
-                let mut control: cocoa_id = msg_send![WINDOW_CLASS_INNER.0, alloc];
-                control = msg_send![control, initWithFrame: base_bounds];
-                control
-            },
+            table: control,
+            header: unsafe { msg_send![control, getHeaderView] },
             on_item_click: None,
-            data: Default::default(),
+            items: Vec::new(),
         };
         let selfptr = ptr as *mut _ as *mut ::std::os::raw::c_void;
         unsafe {
@@ -77,7 +80,6 @@ impl<O: controls::Table> NewTableInner<O> for CocoaTable {
             let () = msg_send![table, setTarget: table];
             let () = msg_send![table, setAction: sel!(itemClicked:)];
             let () = msg_send![table, setFocusRingType:1 as NSUInteger];
-            	let () = msg_send![table, setHeaderView: nil];
         	
             let () = msg_send![control, setAutohidesScrollers: NO];
             let () = msg_send![control, setHasHorizontalScroller: NO];
@@ -114,10 +116,15 @@ impl TableInner for CocoaTable {
         }
     }
     fn headers_visible(&self, _: &MemberBase, _: &ControlBase, _: &AdaptedBase) -> bool {
-        unsafe { self.base.widget.horizontal_header().is_visible() }
+        unsafe { 
+            let header: cocoa_id = msg_send![self.table, getHeaderView];
+            header != nil 
+        }
     }
     fn set_headers_visible(&mut self, _: &mut MemberBase, _: &mut ControlBase, _: &mut AdaptedBase, visible: bool) {
-        unsafe { self.base.widget.horizontal_header().set_visible(visible); }
+        unsafe { 
+            let () = msg_send![self.table, setHeaderView: if visible { self.header } else { nil }];
+        }
     }
     fn set_column_width(&mut self, _: &mut MemberBase, control: &mut ControlBase, _: &mut AdaptedBase, index: usize, size: layout::Size) {
         self.resize_column(control, index, size, true)
@@ -259,9 +266,9 @@ impl ControlInner for CocoaTable {
 
     #[cfg(feature = "markup")]
     fn fill_from_markup(&mut self, base: &mut MemberBase, _control: &mut ControlBase, markup: &plygui_api::markup::Markup, registry: &mut plygui_api::markup::MarkupRegistry) {
-        use plygui_api::markup::MEMBER_TYPE_Table;
+        use plygui_api::markup::MEMBER_TYPE_TABLE;
 
-        fill_from_markup_base!(self, base, markup, registry, Table, [MEMBER_TYPE_Table]);
+        fill_from_markup_base!(self, base, markup, registry, Table, [MEMBER_TYPE_TABLE]);
         //fill_from_markup_items!(self, base, markup, registry);
     }
 }
