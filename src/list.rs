@@ -77,7 +77,7 @@ impl<O: controls::List> NewListInner<O> for CocoaList {
             let () = msg_send![table, setTarget: table];
             let () = msg_send![table, setAction: sel!(itemClicked:)];
             let () = msg_send![table, setFocusRingType:1 as NSUInteger];
-            	let () = msg_send![table, setHeaderView: nil];
+            let () = msg_send![table, setHeaderView: nil];
         	
             let () = msg_send![control, setAutohidesScrollers: NO];
             let () = msg_send![control, setHasHorizontalScroller: NO];
