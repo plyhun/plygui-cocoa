@@ -56,7 +56,8 @@ impl TextInner for CocoaText {
 impl HasLabelInner for CocoaText {
     fn label(&self, _: &MemberBase) -> Cow<str> {
         unsafe {
-            let label: cocoa_id = msg_send![self.base.control, title];
+            let storage: cocoa_id = msg_send![self.base.control, textStorage];
+            let label: cocoa_id = msg_send![storage, string];
             let label: *const c_void = msg_send![label, UTF8String];
             ffi::CStr::from_ptr(label as *const c_char).to_string_lossy()
         }

@@ -114,13 +114,15 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
     }
     pub fn draw(&mut self, coords: Option<(i32, i32)>, (width, height): (u16, u16)) {
         if let Some((x, y)) = coords {
-            let (_, ph) = self.parent().unwrap().is_has_size().unwrap().size();
-            unsafe {
-                let mut frame: NSRect = self.frame();
-                frame.size = NSSize::new(width as f64, height as f64);
-                frame.origin = NSPoint::new(x as f64, (ph as i32 - y - height as i32) as f64);
-                //frame.origin = NSPoint::new(x as f64, y as f64);
-                let () = msg_send![self.control, setFrame: frame];
+            if let Some(parent) = self.parent() {
+                let (_, ph) = parent.is_has_size().unwrap().size();
+                unsafe {
+                    let mut frame: NSRect = self.frame();
+                    frame.size = NSSize::new(width as f64, height as f64);
+                    frame.origin = NSPoint::new(x as f64, (ph as i32 - y - height as i32) as f64);
+                    //frame.origin = NSPoint::new(x as f64, y as f64);
+                    let () = msg_send![self.control, setFrame: frame];
+                }
             }
         }
     }
