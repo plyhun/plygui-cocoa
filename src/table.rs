@@ -16,7 +16,12 @@ lazy_static! {
     };
     static ref WINDOW_CLASS: common::RefClass = unsafe {
         register_window_class("PlyguiTable", "NSScrollView", |decl| {
-            decl.add_method(sel!(setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, NSSize));
+            decl.add_method(sel!(scrollView:setFrameSize:), set_frame_size as extern "C" fn(&mut Object, Sel, cocoa_id, NSSize));
+        })
+    };
+    static ref HEADER_CLASS: common::RefClass = unsafe {
+        register_window_class("PlyguiTableHeaderCell", "NSTableHeaderCell", |decl| {
+            decl.add_method(sel!(tableHeaderCell:drawInteriorWithFrame:inView:), draw_header_cell as extern "C" fn(&mut Object, Sel, cocoa_id, NSRect, cocoa_id));
         })
     };
 }
@@ -77,18 +82,19 @@ impl CocoaTable {
             item.on_added_to_container(this, 0, 0, width, height);
             item.is_has_label().map(|has_label| has_label.label())
         }).flatten();
-        let native = unsafe { 
+        let native: cocoa_id = unsafe { 
             let column: cocoa_id = msg_send![Class::get("NSTableColumn").unwrap(), alloc];
             let ident = NSString::alloc(nil).init_str(maybe_title.as_ref().map(|title| title.as_ref()).unwrap_or("-"));
-            let column: cocoa_id = msg_send![column, initWithIdentifier:ident];
-            let () = msg_send![self.table, addTableColumn: column];
-            column
+            msg_send![column, initWithIdentifier:ident]
         };
         self.data.cols.insert(index, Column {
             control: item,
             native: native,
             width: layout::Size::MatchParent,
         });
+        unsafe {
+            let () = msg_send![self.table, addTableColumn: native];
+        }
         self.resize_column(control, index, self.data.cols[index].width);
         self.data.rows.iter_mut().enumerate().for_each(|(row_index, row)| {
             row.cells.insert(index, None);
@@ -137,7 +143,6 @@ impl CocoaTable {
     }
 	fn remove_column_inner(&mut self, member: &mut MemberBase, index: usize) {
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
-        let widget = &self.base.control;
         self.data.rows.iter_mut().enumerate().for_each(|(row_index, row)| {
             //this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().remove_cell_inner(member, row_index, index);
             let mut cell = if index < row.cells.len() { row.cells.remove(index) } else { None };
@@ -149,6 +154,7 @@ impl CocoaTable {
         column.map(|column| {
             column.control.map(|mut column| column.on_removed_from_container(this));
             unsafe {
+                let () = msg_send![self.table, removeTableColumn:column.native];
                 let () = msg_send![self.table, reloadData];
             }
         });
@@ -274,8 +280,8 @@ impl<O: controls::Table> NewTableInner<O> for CocoaTable {
             let table = li.table;
             (&mut *table).set_ivar(common::IVAR, selfptr);
             
-            let column: cocoa_id = msg_send![Class::get("NSTableColumn").unwrap(), alloc];
-            let ident = NSString::alloc(nil).init_str("_");
+            //let column: cocoa_id = msg_send![Class::get("NSTableColumn").unwrap(), alloc];
+            //let ident = NSString::alloc(nil).init_str("_");
             //let column: cocoa_id = msg_send![column, initWithIdentifier:ident];
             //let () = msg_send![table, addTableColumn: column];
             
@@ -564,17 +570,29 @@ impl Drop for CocoaTable {
                     cell.as_mut().unwrap().control.as_mut()
                         .map(|control| control.on_removed_from_container(this));
                 });
-        });unsafe {
+        });
+        unsafe {
             let () = msg_send![self.table, release];
         }
     }
 }
 
-extern "C" fn set_frame_size(this: &mut Object, sel: Sel, param: NSSize) {
+extern "C" fn set_frame_size(this: &mut Object, sel: Sel, _: cocoa_id, param: NSSize) {
     unsafe {
         let b = common::member_from_cocoa_id_mut::<Table>(this).unwrap();
         let b2 = common::member_from_cocoa_id_mut::<Table>(this).unwrap();
         (b.inner().inner().inner().inner().inner().base.resize_handler)(b2, sel, param)
+    }
+}
+extern "C" fn draw_header_cell(this: &mut Object, _: Sel, _: cocoa_id, frame: NSRect, control: cocoa_id) {
+    unsafe {
+        let column_id: cocoa_id = (this as *mut Object as cocoa_id).clone();
+        let sp = common::member_from_cocoa_id_mut::<Table>(control).unwrap();
+        dbg!(column_id as usize, control as usize, sp.native_id(), "OUT");
+        let sp = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
+        sp.data.cols.iter_mut().filter(|col| col.native == column_id).map(|col| col.control.as_mut()).flatten().for_each(|col| {
+            let () = msg_send![col.native_id() as cocoa_id, setFrame: frame];
+        });
     }
 }
 extern "C" fn set_frame_size_inner<O: controls::Table>(this: &mut Table, _: Sel, param: NSSize) {
@@ -590,20 +608,35 @@ impl Spawnable for CocoaTable {
         Self::with_adapter(Box::new(types::imp::StringVecAdapter::<crate::imp::Text>::new())).into_control()
     }
 }
-
 extern "C" fn datasource_len(this: &mut Object, _: Sel, _: cocoa_id) -> NSInteger {
     unsafe {
         let sp = common::member_from_cocoa_id::<Table>(this).unwrap();
         sp.inner().inner().inner().inner().inner().data.rows.len() as i64
     }
 }
-extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, column: cocoa_id, row: NSInteger) -> cocoa_id {
+extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, column_ref: cocoa_id, row: NSInteger) -> cocoa_id {
     let sp = unsafe { common::member_from_cocoa_id_mut::<Table>(this).unwrap() };
+    let selfptr: usize = sp.native_id().into();
     let sp = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut();
     let column = sp.data.cols.iter().enumerate()
-        .filter(|(_,col)| col.native == column)
-        .map(|(index,_)| index).next().expect("Cannot get a column index");
-    sp.data.cell_at(&[column, row as usize]).map(|cell| cell.native).unwrap_or(nil)
+        .filter(|(_,col)| col.native == column_ref)
+        .map(|(index,col)| (index, col.control.as_ref().map(|ctl| ctl.is_has_label()).flatten().map(|has_label| has_label.label()).unwrap_or(Cow::default()))).next().expect("Cannot get a column index");
+    unsafe {
+        let mut current_header: cocoa_id = msg_send![column_ref, headerCell];
+        if current_header == nil || sp.data.column_at(column.0).map(|col| col.native).unwrap_or(nil) != current_header {
+            //let column_header = sp.data.column_at_mut(column).map(|col| col.control.map(|cnt| cnt.native_id() as cocoa_id)).flatten().unwrap_or(nil);
+            if current_header != nil {
+                let () = msg_send![current_header, release];
+            }
+            let title = NSString::alloc(cocoa::base::nil).init_str(column.1.as_ref());
+            current_header = msg_send![HEADER_CLASS.0, alloc];
+            current_header = msg_send![current_header, initTextCell:title];
+            (&mut *current_header).set_ivar(common::IVAR, selfptr as *mut c_void);
+            let () = msg_send![column_ref, setHeaderCell:current_header];
+            let () = msg_send![title, release];
+        }
+    }
+    sp.data.cell_at(&[column.0, row as usize]).map(|cell| cell.native).unwrap_or(nil)
 }
 extern "C" fn get_item_height(this: &mut Object, _: Sel, _: cocoa_id, row: NSInteger) -> f64 {
     use crate::plygui_api::controls::Control;
@@ -634,13 +667,20 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
     }
     let y: NSInteger = unsafe { msg_send![this, clickedRow] };
     if y < 0 {
-        return;
-    }
-    let item_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.cell_at_mut(&[x as usize, y as usize]).unwrap();
-    if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
-        let sp2 = unsafe { common::member_from_cocoa_id_mut::<Table>(this).unwrap() };
-        if let Some(clicked) = item_view.control.as_mut() {
-            (callback.as_mut())(sp2, &[x as usize, y as usize], clicked.as_mut());
+        let header_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize).unwrap();
+        if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
+            let sp2 = unsafe { common::member_from_cocoa_id_mut::<Table>(this).unwrap() };
+            if let Some(clicked) = header_view.control.as_mut() {
+                (callback.as_mut())(sp2, &[x as usize], clicked.as_mut());
+            }
+        }
+    } else {
+        let item_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.cell_at_mut(&[x as usize, y as usize]).unwrap();
+        if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
+            let sp2 = unsafe { common::member_from_cocoa_id_mut::<Table>(this).unwrap() };
+            if let Some(clicked) = item_view.control.as_mut() {
+                (callback.as_mut())(sp2, &[x as usize, y as usize], clicked.as_mut());
+            }
         }
     }
 }
