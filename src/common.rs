@@ -129,19 +129,20 @@ impl<T: controls::Control + Sized> CocoaControlBase<T> {
     pub fn invalidate(&mut self) {
         let parent_id = self.parent_cocoa_id();
         if let Some(parent_id) = parent_id {
-            let mparent = unsafe { member_base_from_cocoa_id_mut(parent_id).unwrap().as_member_mut() };
-            let this = unsafe { member_from_cocoa_id_mut::<T>(self.control).unwrap() };
+            if let Some(mparent) = unsafe { member_base_from_cocoa_id_mut(parent_id).map(|b| b.as_member_mut())} {
+                let this = unsafe { member_from_cocoa_id_mut::<T>(self.control).unwrap() };
 
-            let mparent_type = mparent.as_any().type_id();
-            if let Some(control) = mparent.is_control_mut() {
-                control.invalidate();
-            } else if mparent_type == any::TypeId::of::<super::window::Window>() {
-                this.draw(None);
-                unsafe {
-                    let () = msg_send![parent_id, setNeedsDisplay: YES];
+                let mparent_type = mparent.as_any().type_id();
+                if let Some(control) = mparent.is_control_mut() {
+                    control.invalidate();
+                } else if mparent_type == any::TypeId::of::<super::window::Window>() {
+                    this.draw(None);
+                    unsafe {
+                        let () = msg_send![parent_id, setNeedsDisplay: YES];
+                    }
+                } else {
+                    panic!("Parent member is unsupported, neither a control, nor a window");
                 }
-            } else {
-                panic!("Parent member is unsupported, neither a control, nor a window");
             }
         }
     }

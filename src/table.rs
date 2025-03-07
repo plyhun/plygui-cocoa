@@ -145,7 +145,7 @@ impl CocoaTable {
         let this: &mut Table = unsafe { utils::base_to_impl_mut(member) };
         self.data.rows.iter_mut().enumerate().for_each(|(row_index, row)| {
             //this.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().remove_cell_inner(member, row_index, index);
-            let mut cell = if index < row.cells.len() { row.cells.remove(index) } else { None };
+            let cell = if index < row.cells.len() { row.cells.remove(index) } else { None };
             cell.map(|cell| {
                 cell.control.map(|mut control| control.on_removed_from_container(this));
             });
@@ -626,12 +626,17 @@ extern "C" fn spawn_item(this: &mut Object, _: Sel, _: cocoa_id, column_ref: coc
         if current_header == nil || sp.data.column_at(column.0).map(|col| col.native).unwrap_or(nil) != current_header {
             //let column_header = sp.data.column_at_mut(column).map(|col| col.control.map(|cnt| cnt.native_id() as cocoa_id)).flatten().unwrap_or(nil);
             if current_header != nil {
-                let () = msg_send![current_header, release];
+                /*let class__:*const Class = msg_send![current_header, class];
+                if HEADER_CLASS.0 != class__ {
+                    dbg!(&(*HEADER_CLASS.0).name(), &(*class__).name());
+                    let () = msg_send![current_header, release];
+                }*/ //TODO WHY??
             }
             let title = NSString::alloc(cocoa::base::nil).init_str(column.1.as_ref());
             current_header = msg_send![HEADER_CLASS.0, alloc];
             current_header = msg_send![current_header, initTextCell:title];
-            (&mut *current_header).set_ivar(common::IVAR, selfptr as *mut c_void);
+            (&mut *current_header).set_ivar(common::IVAR, column_ref as *mut c_void);
+            (&mut *current_header).set_ivar(common::IVAR_PARENT, selfptr as *mut c_void);
             let () = msg_send![column_ref, setHeaderCell:current_header];
             let () = msg_send![title, release];
         }
