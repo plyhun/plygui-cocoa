@@ -325,7 +325,7 @@ impl TableInner for CocoaTable {
         let (member, _, adapter, table) = unsafe { Table::adapter_base_parts_mut(&mut bb.base) };
         adapter.adapter.for_each(&mut (|indexes, node| {
             match node {
-                adapter::Node::Leaf => table.inner_mut().add_cell_inner(member, indexes[0], indexes[1]),
+                adapter::Node::Leaf => table.inner_mut().add_cell_inner(member, indexes[1], indexes[0]),
                 adapter::Node::Branch(_) => table.inner_mut().add_column_inner(member, indexes[0])
             }
         }));
@@ -365,21 +365,21 @@ impl AdaptedInner for CocoaTable {
 		match value {
             adapter::Change::Added(at, node) => {
                 if adapter::Node::Leaf == node || at.len() > 1 {
-                    self.add_cell_inner(base, at[0], at[1]);
+                    self.add_cell_inner(base, at[1], at[0]);
                 } else {
                     self.add_column_inner(base, at[0]);
                 }
             },
             adapter::Change::Removed(at) => {
                 if at.len() > 1 {
-                    self.remove_cell_inner(base, at[0], at[1]);
+                    self.remove_cell_inner(base, at[1], at[0]);
                 } else {
                     self.remove_column_inner(base, at[0]);
                 }
             },
             adapter::Change::Edited(at, node) => {
                 if adapter::Node::Leaf == node || at.len() > 1 {
-                    self.change_cell_inner(base, at[0], at[1]);
+                    self.change_cell_inner(base, at[1], at[0]);
                 } else {
                     self.change_column_inner(base, at[0]);
                 }
@@ -672,7 +672,7 @@ extern "C" fn item_clicked(this: &mut Object, _: Sel, _: cocoa_id) {
     }
     let row: NSInteger = unsafe { msg_send![this, clickedRow] };
     if row < 0 {
-        let header_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(x as usize).unwrap();
+        let header_view = sp.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().data.column_at_mut(col as usize).unwrap();
         if let Some(ref mut callback) = sp2.inner_mut().inner_mut().inner_mut().inner_mut().inner_mut().on_item_click {
             let sp2 = unsafe { common::member_from_cocoa_id_mut::<Table>(this).unwrap() };
             if let Some(clicked) = header_view.control.as_mut() {
